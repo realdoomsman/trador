@@ -1,13 +1,10 @@
-import { Storage } from '@google-cloud/storage';
-import config from '../config.js';
 import fs from 'fs';
 import path from 'path';
 
 class CloudStorage {
   constructor() {
-    this.storage = new Storage();
-    this.bucket = this.storage.bucket(config.gcsBucket);
     this.localCache = './data/cache';
+    this.useCloud = false; // Disabled for now - using local storage
     this.ensureLocalCache();
   }
 
@@ -23,20 +20,10 @@ class CloudStorage {
     const filename = `training/${category}/${timestamp}.json`;
     const content = JSON.stringify({ ...data, timestamp });
     
-    try {
-      await this.bucket.file(filename).save(content, {
-        contentType: 'application/json',
-        metadata: { category, timestamp: timestamp.toString() }
-      });
-      return true;
-    } catch (err) {
-      console.error('Failed to save to GCS:', err.message);
-      // Fallback to local storage
-      const localPath = path.join(this.localCache, filename);
-      fs.mkdirSync(path.dirname(localPath), { recursive: true });
-      fs.writeFileSync(localPath, content);
-      return true;
-    }
+    const localPath = path.join(this.localCache, filename);
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, content);
+    return true;
   }
 
   // Save batch of data points
@@ -45,32 +32,15 @@ class CloudStorage {
     const filename = `training/${category}/batch_${timestamp}.json`;
     const content = JSON.stringify({ dataPoints, timestamp, count: dataPoints.length });
     
-    try {
-      await this.bucket.file(filename).save(content, {
-        contentType: 'application/json',
-        gzip: true
-      });
-      return true;
-    } catch (err) {
-      console.error('Failed to save batch to GCS:', err.message);
-      return false;
-    }
+    const localPath = path.join(this.localCache, filename);
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, content);
+    return true;
   }
 
   // Get total data size
   async getDataSize() {
-    try {
-      const [files] = await this.bucket.getFiles({ prefix: 'training/' });
-      let totalBytes = 0;
-      for (const file of files) {
-        const [metadata] = await file.getMetadata();
-        totalBytes += parseInt(metadata.size) || 0;
-      }
-      return totalBytes;
-    } catch (err) {
-      console.error('Failed to get data size:', err.message);
-      return this.getLocalDataSize();
-    }
+    return this.getLocalDataSize();
   }
 
   getLocalDataSize() {
@@ -94,87 +64,81 @@ class CloudStorage {
 
   // Get data point count
   async getDataPointCount() {
-    try {
-      const [files] = await this.bucket.getFiles({ prefix: 'training/' });
-      return files.length;
-    } catch (err) {
-      return 0;
-    }
+    const countFiles = (dir) => {
+      if (!fs.existsSync(dir)) return 0;
+      let count = 0;
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat.isDirectory()) {
+          count += countFiles(filePath);
+        } else {
+          count++;
+        }
+      }
+      return count;
+    };
+    return countFiles(this.localCache);
   }
 
   // Load training data for analysis
   async loadTrainingData(category, limit = 1000) {
-    try {
-      const [files] = await this.bucket.getFiles({ 
-        prefix: `training/${category}/`,
-        maxResults: limit 
-      });
-      
-      const data = [];
-      for (const file of files.slice(-limit)) {
-        const [content] = await file.download();
-        data.push(JSON.parse(content.toString()));
-      }
-      return data;
-    } catch (err) {
-      console.error('Failed to load training data:', err.message);
-      return [];
+    const dir = path.join(this.localCache, 'training', category);
+    if (!fs.existsSync(dir)) return [];
+    
+    const files = fs.readdirSync(dir).slice(-limit);
+    const data = [];
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(dir, file), 'utf8');
+        data.push(JSON.parse(content));
+      } catch (err) {}
     }
+    return data;
   }
 
   // Save model state
   async saveModelState(state) {
-    const filename = 'model/state.json';
-    const content = JSON.stringify(state);
-    
-    try {
-      await this.bucket.file(filename).save(content, {
-        contentType: 'application/json'
-      });
-    } catch (err) {
-      fs.writeFileSync(path.join(this.localCache, 'model_state.json'), content);
-    }
+    const localPath = path.join(this.localCache, 'model_state.json');
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, JSON.stringify(state));
   }
 
   // Load model state
   async loadModelState() {
-    try {
-      const [content] = await this.bucket.file('model/state.json').download();
-      return JSON.parse(content.toString());
-    } catch (err) {
-      const localPath = path.join(this.localCache, 'model_state.json');
-      if (fs.existsSync(localPath)) {
-        return JSON.parse(fs.readFileSync(localPath, 'utf8'));
-      }
-      return null;
+    const localPath = path.join(this.localCache, 'model_state.json');
+    if (fs.existsSync(localPath)) {
+      return JSON.parse(fs.readFileSync(localPath, 'utf8'));
     }
+    return null;
   }
 
   // Save virtual trade
   async saveVirtualTrade(trade) {
-    const filename = `virtual_trades/${trade.id}.json`;
-    await this.bucket.file(filename).save(JSON.stringify(trade), {
-      contentType: 'application/json'
-    });
+    const dir = path.join(this.localCache, 'virtual_trades');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${trade.id}.json`), JSON.stringify(trade));
   }
 
   // Load virtual trades
   async loadVirtualTrades(days = 30) {
+    const dir = path.join(this.localCache, 'virtual_trades');
+    if (!fs.existsSync(dir)) return [];
+    
     const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    try {
-      const [files] = await this.bucket.getFiles({ prefix: 'virtual_trades/' });
-      const trades = [];
-      for (const file of files) {
-        const [content] = await file.download();
-        const trade = JSON.parse(content.toString());
-        if (trade.timestamp >= cutoff) {
+    const trades = [];
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(dir, file), 'utf8');
+        const trade = JSON.parse(content);
+        if (trade.timestamp >= cutoff || trade.entryTime >= cutoff) {
           trades.push(trade);
         }
-      }
-      return trades;
-    } catch (err) {
-      return [];
+      } catch (err) {}
     }
+    return trades;
   }
 }
 
