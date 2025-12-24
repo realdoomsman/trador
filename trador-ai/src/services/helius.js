@@ -108,10 +108,30 @@ class HeliusService {
   // Get new Pump.fun tokens
   async getPumpFunTokens() {
     try {
-      // Fetch from Pump.fun API
-      const res = await fetch('https://frontend-api.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false');
-      const data = await res.json();
-      return data || [];
+      // Try multiple endpoints
+      const endpoints = [
+        'https://client-api-2-74b1891ee9f9.herokuapp.com/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false',
+        'https://frontend-api.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false'
+      ];
+      
+      for (const url of endpoints) {
+        try {
+          const res = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          const text = await res.text();
+          if (text.startsWith('<')) continue; // HTML response, try next
+          const data = JSON.parse(text);
+          if (Array.isArray(data) && data.length > 0) return data;
+          if (data.coins) return data.coins;
+        } catch (e) {
+          continue;
+        }
+      }
+      return [];
     } catch (err) {
       console.error('Failed to fetch Pump.fun tokens:', err.message);
       return [];
