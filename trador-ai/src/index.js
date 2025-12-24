@@ -66,8 +66,13 @@ async function scanLoop() {
     isIdle = false;
     await rateLimiter.throttle();
     
+    console.log('Fetching tokens...');
     const tokens = await helius.getPumpFunTokens();
-    if (!tokens?.length) return;
+    
+    if (!tokens?.length) {
+      console.log('No tokens found from API');
+      return;
+    }
 
     console.log(`Scanning ${tokens.length} tokens...`);
     
