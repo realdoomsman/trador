@@ -16,6 +16,73 @@ class GeminiAnalyzer {
       return this.analysisCache.get(cacheKey);
     }
 
+    // Use rule-based analysis as fallback when Gemini fails
+    try {
+      const analysis = await this.geminiAnalyze(tokenData, marketContext, historicalPatterns);
+      if (analysis && analysis.confidence > 0) {
+        this.analysisCache.set(cacheKey, analysis);
+        return analysis;
+      }
+    } catch (err) {
+      // Gemini failed, use rule-based
+    }
+
+    // Rule-based analysis fallback
+    const analysis = this.ruleBasedAnalysis(tokenData);
+    this.analysisCache.set(cacheKey, analysis);
+    return analysis;
+  }
+
+  ruleBasedAnalysis(tokenData) {
+    let score = 50;
+    const redFlags = [];
+    const greenFlags = [];
+
+    // Market cap scoring
+    const mcap = tokenData.usd_market_cap || 0;
+    if (mcap >= 10000 && mcap <= 100000) { score += 15; greenFlags.push('Good market cap range'); }
+    else if (mcap > 100000 && mcap <= 500000) { score += 10; greenFlags.push('Mid market cap'); }
+    else if (mcap < 5000) { score -= 20; redFlags.push('Market cap too low'); }
+    else if (mcap > 1000000) { score -= 10; redFlags.push('Market cap too high'); }
+
+    // Liquidity scoring
+    const liq = tokenData.virtual_sol_reserves || 0;
+    if (liq >= 10) { score += 10; greenFlags.push('Good liquidity'); }
+    else if (liq < 2) { score -= 15; redFlags.push('Low liquidity'); }
+
+    // Holder scoring
+    const holders = tokenData.holder_count || 0;
+    if (holders >= 50) { score += 10; greenFlags.push('Good holder count'); }
+    else if (holders < 10) { score -= 10; redFlags.push('Few holders'); }
+
+    // Volume scoring
+    const vol = tokenData.volume24h || 0;
+    if (vol > 10000) { score += 10; greenFlags.push('High volume'); }
+
+    // Price change scoring
+    const change = tokenData.priceChange24h || 0;
+    if (change > 10 && change < 100) { score += 5; greenFlags.push('Positive momentum'); }
+    else if (change > 200) { score -= 10; redFlags.push('Possibly overextended'); }
+    else if (change < -30) { score -= 10; redFlags.push('Downtrend'); }
+
+    const confidence = Math.max(0, Math.min(100, score));
+    
+    return {
+      recommendation: confidence >= 65 ? 'BUY' : confidence >= 45 ? 'HOLD' : 'AVOID',
+      confidence,
+      reasoning: `Rule-based analysis: ${greenFlags.length} positive, ${redFlags.length} negative signals`,
+      riskLevel: confidence >= 70 ? 'low' : confidence >= 50 ? 'medium' : 'high',
+      suggestedEntry: tokenData.price,
+      suggestedStopLoss: tokenData.price * 0.85,
+      suggestedTakeProfit: tokenData.price * 1.5,
+      timeHorizon: 'hours',
+      redFlags,
+      greenFlags
+    };
+  }
+
+  async geminiAnalyze(tokenData, marketContext, historicalPatterns) {
+
     const prompt = `You are a crypto trading AI analyzing Pump.fun memecoins on Solana. Analyze this token and provide a trading recommendation.
 
 TOKEN DATA:
@@ -63,18 +130,10 @@ Respond in JSON format only:
       }
       
       const analysis = JSON.parse(jsonMatch[0]);
-      this.analysisCache.set(cacheKey, analysis);
       return analysis;
     } catch (err) {
       console.error('Gemini analysis failed:', err.message);
-      return {
-        recommendation: 'AVOID',
-        confidence: 0,
-        reasoning: 'Analysis failed',
-        riskLevel: 'high',
-        redFlags: ['Analysis error'],
-        greenFlags: []
-      };
+      return null;
     }
   }
 
