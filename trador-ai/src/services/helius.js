@@ -105,37 +105,57 @@ class HeliusService {
     }
   }
 
-  // Get new Pump.fun tokens
+  // Get new Solana tokens from DexScreener (more reliable than Pump.fun API)
   async getPumpFunTokens() {
     try {
-      // Try multiple endpoints
-      const endpoints = [
-        'https://client-api-2-74b1891ee9f9.herokuapp.com/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false',
-        'https://frontend-api.pump.fun/coins?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false'
-      ];
+      // Use DexScreener API for Solana tokens
+      const res = await fetch('https://api.dexscreener.com/latest/dex/tokens/solana', {
+        headers: { 'Accept': 'application/json' }
+      });
       
-      for (const url of endpoints) {
-        try {
-          const res = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-          });
-          const text = await res.text();
-          if (text.startsWith('<')) continue; // HTML response, try next
-          const data = JSON.parse(text);
-          if (Array.isArray(data) && data.length > 0) return data;
-          if (data.coins) return data.coins;
-        } catch (e) {
-          continue;
+      if (!res.ok) {
+        // Fallback: get trending Solana pairs
+        const fallback = await fetch('https://api.dexscreener.com/latest/dex/search?q=solana');
+        const fallbackData = await fallback.json();
+        if (fallbackData.pairs) {
+          return fallbackData.pairs.slice(0, 50).map(p => this.formatDexScreenerToken(p));
         }
+        return [];
+      }
+      
+      const data = await res.json();
+      if (data.pairs) {
+        return data.pairs.slice(0, 50).map(p => this.formatDexScreenerToken(p));
       }
       return [];
     } catch (err) {
-      console.error('Failed to fetch Pump.fun tokens:', err.message);
+      console.error('Failed to fetch tokens:', err.message);
+      // Last resort: generate learning data from Raydium new pairs
+      try {
+        const raydium = await fetch('https://api.dexscreener.com/latest/dex/pairs/solana/raydium');
+        const raydiumData = await raydium.json();
+        if (raydiumData.pairs) {
+          return raydiumData.pairs.slice(0, 50).map(p => this.formatDexScreenerToken(p));
+        }
+      } catch (e) {}
       return [];
     }
+  }
+
+  formatDexScreenerToken(pair) {
+    return {
+      mint: pair.baseToken?.address || pair.pairAddress,
+      symbol: pair.baseToken?.symbol || 'UNKNOWN',
+      name: pair.baseToken?.name || 'Unknown Token',
+      usd_market_cap: pair.marketCap || pair.fdv || 0,
+      virtual_sol_reserves: pair.liquidity?.usd ? pair.liquidity.usd / 200 : 0,
+      holder_count: 100, // DexScreener doesn't provide this
+      created_timestamp: new Date(pair.pairCreatedAt || Date.now()).toISOString(),
+      price: parseFloat(pair.priceUsd) || 0,
+      volume24h: pair.volume?.h24 || 0,
+      priceChange24h: pair.priceChange?.h24 || 0,
+      txns24h: (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0)
+    };
   }
 
   // Get token details from Pump.fun
