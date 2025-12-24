@@ -4,7 +4,7 @@ import config from '../config.js';
 class GeminiAnalyzer {
   constructor() {
     this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     this.analysisCache = new Map();
     this.cacheTimeout = 60000; // 1 minute cache
   }
