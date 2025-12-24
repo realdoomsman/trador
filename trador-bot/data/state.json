@@ -1,0 +1,19 @@
+{
+  "walletAddress": "6HPKyZtHYVzxEgxtZdaPTbPUf8vz3SJPJRBhy7TmGhkR",
+  "solBalance": 10,
+  "baseline": 10,
+  "totalProfit": 0,
+  "stats": {
+    "totalTrades": 0,
+    "wins": 0,
+    "losses": 0,
+    "totalPnlSol": 0,
+    "totalPnlPercent": 0,
+    "biggestWin": 0,
+    "biggestLoss": 0,
+    "winStreak": 0,
+    "currentStreak": 0,
+    "totalBuybacks": 0,
+    "totalBuybackSol": 0
+  }
+}
