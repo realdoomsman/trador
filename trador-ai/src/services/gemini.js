@@ -4,9 +4,11 @@ import config from '../config.js';
 class GeminiAnalyzer {
   constructor() {
     this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    // Use gemini-1.5-flash (gemini-pro is deprecated)
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     this.analysisCache = new Map();
     this.cacheTimeout = 60000; // 1 minute cache
+    this.geminiEnabled = !!config.geminiApiKey;
   }
 
   // Analyze a token for trading potential
@@ -16,15 +18,17 @@ class GeminiAnalyzer {
       return this.analysisCache.get(cacheKey);
     }
 
-    // Use rule-based analysis as fallback when Gemini fails
-    try {
-      const analysis = await this.geminiAnalyze(tokenData, marketContext, historicalPatterns);
-      if (analysis && analysis.confidence > 0) {
-        this.analysisCache.set(cacheKey, analysis);
-        return analysis;
+    // Use rule-based analysis as fallback when Gemini fails or is disabled
+    if (this.geminiEnabled) {
+      try {
+        const analysis = await this.geminiAnalyze(tokenData, marketContext, historicalPatterns);
+        if (analysis && analysis.confidence > 0) {
+          this.analysisCache.set(cacheKey, analysis);
+          return analysis;
+        }
+      } catch (err) {
+        // Gemini failed, use rule-based silently
       }
-    } catch (err) {
-      // Gemini failed, use rule-based
     }
 
     // Rule-based analysis fallback
