@@ -113,55 +113,53 @@ class HeliusService {
     }
   }
 
-  // Get ONLY real Pump.fun tokens
+  // Get tokens - prioritize Birdeye (paid plan) for more data
   async getPumpFunTokens() {
-    // Try Pump.fun API directly first (guaranteed real pump.fun tokens)
+    // PRIMARY: Use Birdeye (you have paid plan - best data)
+    if (this.birdeyeKey) {
+      try {
+        console.log('[TOKEN FETCH] Using Birdeye (paid plan)...');
+        const tokens = await this.getBirdeyeTokens();
+        if (tokens && tokens.length > 0) {
+          this.dataSource = 'birdeye';
+          console.log(`[BIRDEYE] Fetched ${tokens.length} tokens`);
+          return tokens;
+        }
+        console.log('[TOKEN FETCH] Birdeye returned 0 tokens');
+      } catch (e) {
+        console.error('[TOKEN FETCH] Birdeye failed:', e.message);
+      }
+    }
+
+    // BACKUP 1: Try Pump.fun API directly
     try {
       console.log('[TOKEN FETCH] Trying Pump.fun API...');
       const tokens = await this.getPumpFunCoins();
       if (tokens && tokens.length > 0) {
         this.dataSource = 'pumpfun';
-        console.log(`[PUMP.FUN] Fetched ${tokens.length} REAL pump.fun tokens`);
+        console.log(`[PUMP.FUN] Fetched ${tokens.length} tokens`);
         return tokens;
       }
-      console.log('[TOKEN FETCH] Pump.fun returned 0 tokens');
     } catch (e) {
-      console.error('[TOKEN FETCH] Pump.fun API failed:', e.message);
+      console.error('[TOKEN FETCH] Pump.fun failed:', e.message);
     }
 
-    // Backup: DexScreener filtered to pump.fun only
+    // BACKUP 2: DexScreener
     try {
       console.log('[TOKEN FETCH] Trying DexScreener...');
       const tokens = await this.getDexScreenerPumpFunTokens();
       if (tokens && tokens.length > 0) {
-        this.dataSource = 'dexscreener-pumpfun';
-        console.log(`[DEXSCREENER] Fetched ${tokens.length} pump.fun tokens`);
+        this.dataSource = 'dexscreener';
+        console.log(`[DEXSCREENER] Fetched ${tokens.length} tokens`);
         return tokens;
       }
-      console.log('[TOKEN FETCH] DexScreener returned 0 tokens');
     } catch (e) {
-      console.error('[TOKEN FETCH] DexScreener pump.fun failed:', e.message);
-    }
-
-    // RELIABLE FALLBACK: Use Birdeye directly (was working before)
-    if (this.birdeyeKey) {
-      try {
-        console.log('[TOKEN FETCH] Trying Birdeye direct...');
-        const tokens = await this.getBirdeyeTokens();
-        if (tokens && tokens.length > 0) {
-          this.dataSource = 'birdeye';
-          console.log(`[BIRDEYE] Fetched ${tokens.length} tokens from Birdeye`);
-          return tokens;
-        }
-        console.log('[TOKEN FETCH] Birdeye returned 0 tokens');
-      } catch (e) {
-        console.error('[TOKEN FETCH] Birdeye direct failed:', e.message);
-      }
+      console.error('[TOKEN FETCH] DexScreener failed:', e.message);
     }
 
     // Fallback: Generate synthetic training data
     this.dataSource = 'synthetic';
-    console.log('[SYNTHETIC DATA] All APIs failed, using synthetic data for training...');
+    console.log('[SYNTHETIC] All APIs failed, using synthetic data');
     return this.generateSyntheticTokens(50);
   }
 
