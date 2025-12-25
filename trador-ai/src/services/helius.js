@@ -325,17 +325,23 @@ class HeliusService {
     
     const allTokens = [];
     
-    // Fetch from multiple endpoints for variety
+    // Fetch from multiple timeframes for maximum variety
     const endpoints = [
-      // 1h volume - catches newer active tokens
-      'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=30',
+      // Super fresh - 30min volume (catching pumps early)
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mUSD&sort_type=desc&offset=0&limit=20', name: '30m vol' },
+      // 1h volume - active tokens
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=20', name: '1h vol' },
+      // 4h volume - medium term movers
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v4hUSD&sort_type=desc&offset=0&limit=15', name: '4h vol' },
+      // 24h volume - established tokens
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=15', name: '24h vol' },
       // Recently traded - fresh activity
-      'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=30',
-      // 24h volume for established tokens
-      'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=20'
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=20', name: 'recent' },
+      // Price change movers
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=15', name: '1h gainers' }
     ];
     
-    for (const url of endpoints) {
+    for (const { url, name } of endpoints) {
       try {
         const res = await fetch(url, {
           headers: {
@@ -349,6 +355,7 @@ class HeliusService {
         const data = await res.json();
         if (!data.data?.tokens) continue;
         
+        let added = 0;
         for (const t of data.data.tokens) {
           // Skip if already added
           if (allTokens.find(x => x.mint === t.address)) continue;
@@ -391,13 +398,18 @@ class HeliusService {
             // Calculated metrics
             buyPressure: t.buy24h && t.sell24h ? (t.buy24h / (t.buy24h + t.sell24h)) * 100 : 50,
             volumeToMcap: t.mc ? (t.v24hUSD || 0) / t.mc : 0,
-            source: 'birdeye'
+            source: 'birdeye',
+            fetchedFrom: name
           });
+          added++;
         }
       } catch (e) {
-        console.error(`Birdeye endpoint failed: ${e.message}`);
+        // Skip failed endpoint
       }
     }
+    
+    console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens (30m/1h/4h/24h vol + recent + gainers)`);
+    return allTokens;
     
     console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens from multiple timeframes`);
     return allTokens;
