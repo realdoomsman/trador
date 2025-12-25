@@ -81,13 +81,13 @@ export default {
     }
   },
   
-  // Data collection intervals
-  scanInterval: 60000,          // 60 seconds (slower to avoid rate limits)
+  // Data collection intervals (faster with Birdeye Starter plan)
+  scanInterval: 30000,          // 30 seconds - 2x faster scanning
   priceUpdateInterval: 10000,   // 10 seconds
-  analysisInterval: 60000,      // 1 minute
+  analysisInterval: 30000,      // 30 seconds
   
-  // Learning thresholds
-  minDataPointsForTraining: 1000,
-  minDataPointsForVirtualTrading: 5000,
+  // Learning thresholds (lowered for faster iteration)
+  minDataPointsForTraining: 50,
+  minDataPointsForVirtualTrading: 100,
   confidenceDecayRate: 0.001,   // Decay per hour without new data
 };

@@ -146,7 +146,7 @@ async function scanLoop() {
     
     // Use GPU parallel processing if available
     const results = await gpuWorker.processParallel(
-      tokens.slice(0, 20),
+      tokens.slice(0, 35), // Scan 35 tokens per batch with Birdeye Starter
       async (token) => {
         await rateLimiter.throttle();
         return brain.analyzeToken(token);
