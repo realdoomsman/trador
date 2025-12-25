@@ -43,12 +43,12 @@ class TradingBrain {
     this.activeVirtualPositions = new Map();
     this.seenTokens = new Set();
     this.dataBuffer = [];
-    this.bufferFlushSize = 100;
+    this.bufferFlushSize = 10; // Flush more frequently
     
     // Price tracking for learning outcomes
     this.trackedTokens = new Map();
     this.maxTrackedTokens = 500;
-    this.trackDuration = 30 * 60 * 1000;
+    this.trackDuration = 10 * 60 * 1000; // 10 minutes for faster learning
   }
 
   async initialize() {
@@ -817,6 +817,11 @@ class TradingBrain {
   async checkTrackedOutcomes() {
     const now = Date.now();
     const toRemove = [];
+    const readyCount = [...this.trackedTokens.values()].filter(t => now - t.entryTime >= this.trackDuration).length;
+    
+    if (readyCount > 0) {
+      console.log(`Checking ${readyCount} tokens ready for outcome learning...`);
+    }
     
     for (const [mint, tracked] of this.trackedTokens) {
       // Check if tracking period is over
@@ -826,6 +831,7 @@ class TradingBrain {
         // Get current price from Birdeye
         const currentData = await this.getTokenPrice(mint);
         if (!currentData || !currentData.price) {
+          console.log(`Could not get price for ${tracked.symbol} (${mint.slice(0,8)}...) - skipping`);
           toRemove.push(mint);
           continue;
         }
@@ -987,10 +993,18 @@ class TradingBrain {
           'x-chain': 'solana'
         }
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.log(`Birdeye price API error: ${res.status} for ${mint.slice(0,8)}...`);
+        return null;
+      }
       const data = await res.json();
-      return data.data ? { price: data.data.value } : null;
+      if (data.data?.value) {
+        return { price: data.data.value };
+      }
+      console.log(`No price data from Birdeye for ${mint.slice(0,8)}...`);
+      return null;
     } catch (err) {
+      console.log(`Price fetch error for ${mint.slice(0,8)}...: ${err.message}`);
       return null;
     }
   }
