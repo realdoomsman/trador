@@ -101,6 +101,13 @@ function App() {
         {/* Learning Data */}
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>Learning Data</h2>
+          <div style={{
+            ...styles.dataSourceBadge,
+            background: status?.isRealData ? '#00aa55' : '#cc3333'
+          }}>
+            {status?.isRealData ? 'REAL DATA' : 'SYNTHETIC DATA'} 
+            {status?.dataSource && ` (${status.dataSource})`}
+          </div>
           <div style={styles.dataStats}>
             <div style={styles.dataStat}>
               <div style={styles.dataValue}>{status?.dataSize || '0 MB'}</div>
@@ -300,6 +307,7 @@ const styles = {
   dataStat: { textAlign: 'center' },
   dataValue: { fontSize: 24, fontWeight: 700, color: '#00ccff' },
   dataLabel: { fontSize: 12, color: '#666', marginTop: 4 },
+  dataSourceBadge: { textAlign: 'center', padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 700, marginBottom: 16, color: '#fff' },
   progressBar: { height: 8, background: '#1a1a2e', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
   progressFill: { height: '100%', borderRadius: 4, transition: 'width 0.3s' },
   progressLabel: { fontSize: 12, color: '#666', textAlign: 'center' },

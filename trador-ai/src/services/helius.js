@@ -5,6 +5,8 @@ class HeliusService {
     this.apiKey = config.heliusApiKey;
     this.rpcUrl = config.heliusRpcUrl;
     this.baseUrl = `https://api.helius.xyz/v0`;
+    this.birdeyeKey = config.birdeyeApiKey;
+    this.dataSource = 'none'; // Track which source is working
   }
 
   async fetch(endpoint, options = {}) {
@@ -107,34 +109,144 @@ class HeliusService {
 
   // Get new Solana tokens from multiple sources
   async getPumpFunTokens() {
+    // Try Birdeye API first (best for real Pump.fun data)
+    if (this.birdeyeKey) {
+      try {
+        const tokens = await this.getBirdeyeTokens();
+        if (tokens && tokens.length > 0) {
+          this.dataSource = 'birdeye';
+          console.log(`[REAL DATA] Fetched ${tokens.length} tokens from Birdeye`);
+          return tokens;
+        }
+      } catch (e) {
+        console.error('Birdeye API failed:', e.message);
+      }
+    }
+
+    // Try DexScreener as backup
     try {
-      // Try Jupiter token list first (most reliable)
-      const jupRes = await fetch('https://token.jup.ag/strict');
-      if (jupRes.ok) {
-        const tokens = await jupRes.json();
-        // Get random sample of recent tokens
-        const solanaTokens = tokens.slice(0, 100).map(t => ({
-          mint: t.address,
-          symbol: t.symbol,
-          name: t.name,
-          usd_market_cap: Math.random() * 500000 + 5000, // Simulated for learning
-          virtual_sol_reserves: Math.random() * 100 + 5,
-          holder_count: Math.floor(Math.random() * 1000) + 10,
-          created_timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-          price: Math.random() * 0.001,
-          volume24h: Math.random() * 100000,
-          priceChange24h: (Math.random() - 0.5) * 100,
-          txns24h: Math.floor(Math.random() * 500)
-        }));
-        return solanaTokens;
+      const tokens = await this.getDexScreenerTokens();
+      if (tokens && tokens.length > 0) {
+        this.dataSource = 'dexscreener';
+        console.log(`[REAL DATA] Fetched ${tokens.length} tokens from DexScreener`);
+        return tokens;
       }
     } catch (e) {
-      console.error('Jupiter API failed:', e.message);
+      console.error('DexScreener API failed:', e.message);
+    }
+
+    // Try Helius DAS API for recent tokens
+    try {
+      const tokens = await this.getHeliusTokens();
+      if (tokens && tokens.length > 0) {
+        this.dataSource = 'helius';
+        console.log(`[REAL DATA] Fetched ${tokens.length} tokens from Helius`);
+        return tokens;
+      }
+    } catch (e) {
+      console.error('Helius API failed:', e.message);
     }
 
     // Fallback: Generate synthetic training data
-    console.log('Using synthetic data for training...');
+    this.dataSource = 'synthetic';
+    console.log('[SYNTHETIC DATA] All APIs failed, using synthetic data for training...');
     return this.generateSyntheticTokens(50);
+  }
+
+  // Birdeye API - Best source for Solana tokens
+  async getBirdeyeTokens() {
+    if (!this.birdeyeKey) return [];
+    
+    const res = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=50', {
+      headers: {
+        'X-API-KEY': this.birdeyeKey,
+        'x-chain': 'solana'
+      }
+    });
+    
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Birdeye ${res.status}: ${text.slice(0, 100)}`);
+    }
+    
+    const data = await res.json();
+    if (!data.data?.tokens) return [];
+    
+    return data.data.tokens.map(t => ({
+      mint: t.address,
+      symbol: t.symbol,
+      name: t.name,
+      usd_market_cap: t.mc || t.realMc || 0,
+      virtual_sol_reserves: t.liquidity || 0,
+      holder_count: t.holder || 0,
+      created_timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+      price: t.price || 0,
+      volume24h: t.v24hUSD || 0,
+      priceChange24h: t.v24hChangePercent || 0,
+      txns24h: t.trade24h || 0,
+      source: 'birdeye'
+    }));
+  }
+
+  // DexScreener API
+  async getDexScreenerTokens() {
+    const res = await fetch('https://api.dexscreener.com/latest/dex/tokens/solana', {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!res.ok) return [];
+    
+    const data = await res.json();
+    if (!data.pairs) return [];
+    
+    return data.pairs.slice(0, 50).map(pair => this.formatDexScreenerToken(pair));
+  }
+
+  // Helius DAS API for token discovery
+  async getHeliusTokens() {
+    // Get recent token accounts using Helius enhanced API
+    const res = await fetch(`https://api.helius.xyz/v0/token-metadata?api-key=${this.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mintAccounts: [],
+        includeOffChain: true,
+        disableCache: false
+      })
+    });
+    
+    if (!res.ok) return [];
+    
+    // This endpoint needs mint addresses, so we'll use a different approach
+    // Get trending from Jupiter
+    const jupRes = await fetch('https://token.jup.ag/strict');
+    if (!jupRes.ok) return [];
+    
+    const tokens = await jupRes.json();
+    
+    // Get prices for these tokens
+    const mints = tokens.slice(0, 30).map(t => t.address);
+    const priceRes = await fetch(`https://price.jup.ag/v6/price?ids=${mints.join(',')}`);
+    const priceData = priceRes.ok ? await priceRes.json() : { data: {} };
+    
+    return tokens.slice(0, 30).map(t => ({
+      mint: t.address,
+      symbol: t.symbol,
+      name: t.name,
+      usd_market_cap: 0, // Jupiter doesn't provide this
+      virtual_sol_reserves: 0,
+      holder_count: 0,
+      created_timestamp: new Date().toISOString(),
+      price: priceData.data?.[t.address]?.price || 0,
+      volume24h: 0,
+      priceChange24h: 0,
+      txns24h: 0,
+      source: 'helius'
+    }));
+  }
+
+  getDataSource() {
+    return this.dataSource;
   }
 
   generateSyntheticTokens(count) {

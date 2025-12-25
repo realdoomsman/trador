@@ -19,11 +19,14 @@ let idleInterval = null;
 
 // API Endpoints
 app.get('/api/status', (req, res) => {
+  const dataSource = helius.getDataSource();
   res.json({
     running: isRunning,
     idle: isIdle,
     gpu: gpuWorker.getStatus(),
     rateLimit: rateLimiter.getUsage(),
+    dataSource: dataSource,
+    isRealData: dataSource !== 'synthetic' && dataSource !== 'none',
     ...brain.getStatus()
   });
 });
@@ -74,7 +77,9 @@ async function scanLoop() {
       return;
     }
 
-    console.log(`Scanning ${tokens.length} tokens...`);
+    const dataSource = helius.getDataSource();
+    const isReal = dataSource !== 'synthetic' && dataSource !== 'none';
+    console.log(`[${isReal ? 'REAL' : 'SYNTHETIC'}] Scanning ${tokens.length} tokens from ${dataSource}...`);
     
     // Use GPU parallel processing if available
     const results = await gpuWorker.processParallel(

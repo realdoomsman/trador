@@ -8,6 +8,9 @@ export default {
   // Gemini
   geminiApiKey: process.env.GEMINI_API_KEY,
   
+  // Birdeye API (best for Pump.fun tokens)
+  birdeyeApiKey: process.env.BIRDEYE_API_KEY,
+  
   // Helius - Rate Limits based on plan
   // FREE: 10 RPS, 100k credits/day
   // DEVELOPER: 50 RPS, 500k credits/day  
