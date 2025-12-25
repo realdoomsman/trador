@@ -316,7 +316,7 @@ class TradingBrain {
       multiTimeframe: advancedAnalysis.multiTimeframe,
       smartWalletBuying: advancedAnalysis.smartWalletBuying,
       dynamicExits: advancedAnalysis.exits,
-      flags: allFlags,
+      flags: [...allFlags], // Ensure flags is always a fresh array
       flagsObj: flagsObj,
       finalConfidence: advancedAnalysis.confidence,
       // Alpha engine additions
@@ -360,7 +360,7 @@ class TradingBrain {
       // Penalize for risky wallets
       if (walletAnalysis.overallRisk > 70) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 15);
-        combinedAnalysis.flags.push('HIGH_WALLET_RISK');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('HIGH_WALLET_RISK');
       }
       // Boost for smart money
       if (walletAnalysis.profitableWallets.length > 2) {
@@ -369,7 +369,7 @@ class TradingBrain {
       // Penalize for coordinated holding
       if (walletAnalysis.clusters?.hasCoordinatedHolding) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
-        combinedAnalysis.flags.push('COORDINATED_HOLDING');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('COORDINATED_HOLDING');
       }
     }
     
@@ -378,22 +378,22 @@ class TradingBrain {
       // Boost for hot narrative
       if (socialAnalysis.narrative?.isHotNarrative) {
         combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 10);
-        combinedAnalysis.flags.push('HOT_NARRATIVE');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('HOT_NARRATIVE');
       }
       // Boost for viral
       if (socialAnalysis.viral?.isViral) {
         combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 15);
-        combinedAnalysis.flags.push('VIRAL');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('VIRAL');
       }
       // Penalize for fading hype
       if (socialAnalysis.viral?.isFading) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 10);
-        combinedAnalysis.flags.push('HYPE_FADING');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('HYPE_FADING');
       }
       // Penalize for pump & dump
       if (socialAnalysis.hype?.isPumpAndDump) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 25);
-        combinedAnalysis.flags.push('PUMP_AND_DUMP');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('PUMP_AND_DUMP');
       }
     }
     
@@ -401,11 +401,11 @@ class TradingBrain {
     if (aiConsensus && aiConsensus.aiCount >= 2) {
       if (aiConsensus.consensus === 'BUY' && aiConsensus.agreement >= 70) {
         combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 10);
-        combinedAnalysis.flags.push('AI_CONSENSUS_BUY');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('AI_CONSENSUS_BUY');
       }
       if (aiConsensus.consensus === 'SELL' && aiConsensus.agreement >= 70) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 15);
-        combinedAnalysis.flags.push('AI_CONSENSUS_SELL');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('AI_CONSENSUS_SELL');
       }
     }
     
@@ -413,7 +413,7 @@ class TradingBrain {
     if (securityCheck) {
       if (securityCheck.riskScore > 70) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
-        combinedAnalysis.flags.push('SECURITY_RISK');
+        if (Array.isArray(combinedAnalysis.flags)) combinedAnalysis.flags.push('SECURITY_RISK');
       }
       if (securityCheck.isSafe) {
         combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 5);
