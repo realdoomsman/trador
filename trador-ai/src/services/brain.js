@@ -23,13 +23,23 @@ class TradingBrain {
         virtualWins: 0,
         virtualLosses: 0,
         avgWinPercent: 0,
-        avgLossPercent: 0
+        avgLossPercent: 0,
+        // New learning stats
+        tokensTracked: 0,
+        pumps: 0,      // Tokens that went up 20%+
+        dumps: 0,      // Tokens that went down 20%+
+        neutral: 0     // Tokens that stayed flat
       }
     };
     this.activeVirtualPositions = new Map();
     this.seenTokens = new Set();
     this.dataBuffer = [];
     this.bufferFlushSize = 100;
+    
+    // Price tracking for learning outcomes
+    this.trackedTokens = new Map(); // mint -> { data, entryPrice, entryTime }
+    this.maxTrackedTokens = 500;
+    this.trackDuration = 30 * 60 * 1000; // Track for 30 minutes
   }
 
   async initialize() {
@@ -203,6 +213,9 @@ class TradingBrain {
     
     // Collect data point for learning
     await this.collectDataPoint(tokenData, null, null);
+    
+    // Track this token to learn outcome later
+    this.trackToken(enrichedData, analysis);
 
     return {
       token: enrichedData,
@@ -419,11 +432,129 @@ class TradingBrain {
       activePositions: this.activeVirtualPositions.size,
       pnl: this.state.pnl,
       stats: this.state.stats,
+      trackedTokens: this.trackedTokens.size,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns
       } : null
     };
+  }
+
+  // Track a token to learn its outcome
+  trackToken(tokenData, analysis) {
+    if (this.trackedTokens.size >= this.maxTrackedTokens) {
+      // Remove oldest tracked token
+      const oldest = [...this.trackedTokens.entries()].sort((a, b) => a[1].entryTime - b[1].entryTime)[0];
+      if (oldest) this.trackedTokens.delete(oldest[0]);
+    }
+
+    const price = tokenData.price || (tokenData.usd_market_cap / 1e9) || 0;
+    if (price <= 0) return;
+
+    this.trackedTokens.set(tokenData.mint, {
+      mint: tokenData.mint,
+      symbol: tokenData.symbol,
+      name: tokenData.name,
+      entryPrice: price,
+      entryMarketCap: tokenData.usd_market_cap,
+      entryTime: Date.now(),
+      analysis: analysis,
+      tokenData: { ...tokenData }
+    });
+    
+    this.state.stats.tokensTracked++;
+  }
+
+  // Check tracked tokens and learn from outcomes
+  async checkTrackedOutcomes() {
+    const now = Date.now();
+    const toRemove = [];
+    
+    for (const [mint, tracked] of this.trackedTokens) {
+      // Check if tracking period is over
+      if (now - tracked.entryTime < this.trackDuration) continue;
+      
+      try {
+        // Get current price from Birdeye
+        const currentData = await this.getTokenPrice(mint);
+        if (!currentData || !currentData.price) {
+          toRemove.push(mint);
+          continue;
+        }
+
+        const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
+        
+        // Classify outcome
+        let outcome;
+        if (pnlPercent >= 20) {
+          outcome = 'pump';
+          this.state.stats.pumps++;
+        } else if (pnlPercent <= -20) {
+          outcome = 'dump';
+          this.state.stats.dumps++;
+        } else {
+          outcome = 'neutral';
+          this.state.stats.neutral++;
+        }
+
+        // Save learning data with outcome
+        const learningData = {
+          timestamp: Date.now(),
+          token: tracked.tokenData,
+          entryPrice: tracked.entryPrice,
+          exitPrice: currentData.price,
+          pnlPercent,
+          outcome,
+          holdTimeMinutes: (now - tracked.entryTime) / 60000,
+          analysis: tracked.analysis,
+          // What we can learn from
+          signals: {
+            marketCap: tracked.tokenData.usd_market_cap,
+            volume: tracked.tokenData.volume24h,
+            priceChange: tracked.tokenData.priceChange24h,
+            holders: tracked.tokenData.holder_count,
+            liquidity: tracked.tokenData.virtual_sol_reserves
+          }
+        };
+
+        this.dataBuffer.push(learningData);
+        
+        if (outcome === 'pump') {
+          console.log(`LEARNED: ${tracked.symbol} pumped ${pnlPercent.toFixed(1)}%`);
+        } else if (outcome === 'dump') {
+          console.log(`LEARNED: ${tracked.symbol} dumped ${pnlPercent.toFixed(1)}%`);
+        }
+
+        toRemove.push(mint);
+      } catch (err) {
+        toRemove.push(mint);
+      }
+    }
+
+    // Clean up
+    toRemove.forEach(mint => this.trackedTokens.delete(mint));
+    
+    // Flush if we have enough data
+    if (this.dataBuffer.length >= 20) {
+      await this.flushDataBuffer();
+    }
+  }
+
+  // Get token price from Birdeye
+  async getTokenPrice(mint) {
+    try {
+      const res = await fetch(`https://public-api.birdeye.so/defi/price?address=${mint}`, {
+        headers: {
+          'X-API-KEY': config.birdeyeApiKey,
+          'x-chain': 'solana'
+        }
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.data ? { price: data.data.value } : null;
+    } catch (err) {
+      return null;
+    }
   }
 }
 

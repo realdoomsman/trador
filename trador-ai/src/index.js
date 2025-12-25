@@ -16,6 +16,7 @@ let scanInterval = null;
 let positionInterval = null;
 let patternInterval = null;
 let idleInterval = null;
+let outcomeInterval = null;
 
 // API Endpoints
 app.get('/api/status', (req, res) => {
@@ -138,12 +139,15 @@ async function startBot() {
   
   isRunning = true;
   
-  // Scan every 30s
+  // Scan every 60s
   scanInterval = setInterval(scanLoop, config.scanInterval);
   scanLoop();
   
   // Update positions every 10s
   positionInterval = setInterval(() => brain.updateVirtualPositions(), config.priceUpdateInterval);
+  
+  // Check tracked token outcomes every 2 minutes
+  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 120000);
   
   // Pattern analysis every 30min
   patternInterval = setInterval(() => brain.analyzePatterns(), 1800000);
@@ -159,7 +163,7 @@ async function startBot() {
 
 function stopBot() {
   isRunning = false;
-  [scanInterval, positionInterval, patternInterval, idleInterval].forEach(i => clearInterval(i));
+  [scanInterval, positionInterval, patternInterval, idleInterval, outcomeInterval].forEach(i => clearInterval(i));
   brain.flushDataBuffer();
   brain.saveState();
   console.log('TRADOR AI stopped');

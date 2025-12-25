@@ -164,28 +164,54 @@ function App() {
 
         {/* Trading Stats */}
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>Trading Statistics</h2>
+          <h2 style={styles.cardTitle}>Learning Stats</h2>
           <div style={styles.statsGrid}>
             <div style={styles.statItem}>
-              <div style={styles.statValue}>{status?.stats?.totalVirtualTrades || 0}</div>
-              <div style={styles.statLabel}>Total Trades</div>
+              <div style={styles.statValue}>{status?.trackedTokens || 0}</div>
+              <div style={styles.statLabel}>Tracking</div>
             </div>
             <div style={styles.statItem}>
-              <div style={{ ...styles.statValue, color: '#00ff88' }}>{status?.stats?.virtualWins || 0}</div>
-              <div style={styles.statLabel}>Wins</div>
+              <div style={{ ...styles.statValue, color: '#00ff88' }}>{status?.stats?.pumps || 0}</div>
+              <div style={styles.statLabel}>Pumps</div>
             </div>
             <div style={styles.statItem}>
-              <div style={{ ...styles.statValue, color: '#ff4444' }}>{status?.stats?.virtualLosses || 0}</div>
-              <div style={styles.statLabel}>Losses</div>
+              <div style={{ ...styles.statValue, color: '#ff4444' }}>{status?.stats?.dumps || 0}</div>
+              <div style={styles.statLabel}>Dumps</div>
             </div>
             <div style={styles.statItem}>
-              <div style={styles.statValue}>
-                {status?.stats?.totalVirtualTrades > 0 
-                  ? ((status?.stats?.virtualWins / status?.stats?.totalVirtualTrades) * 100).toFixed(1) 
-                  : 0}%
-              </div>
-              <div style={styles.statLabel}>Win Rate</div>
+              <div style={styles.statValue}>{status?.stats?.neutral || 0}</div>
+              <div style={styles.statLabel}>Neutral</div>
             </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: '#666', textAlign: 'center' }}>
+            Tokens tracked for 30min to learn outcomes
+          </div>
+        </div>
+      </div>
+
+      {/* Virtual Trading Stats */}
+      <div style={styles.card2}>
+        <h2 style={styles.cardTitle}>Virtual Trading</h2>
+        <div style={styles.statsRow}>
+          <div style={styles.statItem2}>
+            <div style={styles.statValue}>{status?.stats?.totalVirtualTrades || 0}</div>
+            <div style={styles.statLabel}>Trades</div>
+          </div>
+          <div style={styles.statItem2}>
+            <div style={{ ...styles.statValue, color: '#00ff88' }}>{status?.stats?.virtualWins || 0}</div>
+            <div style={styles.statLabel}>Wins</div>
+          </div>
+          <div style={styles.statItem2}>
+            <div style={{ ...styles.statValue, color: '#ff4444' }}>{status?.stats?.virtualLosses || 0}</div>
+            <div style={styles.statLabel}>Losses</div>
+          </div>
+          <div style={styles.statItem2}>
+            <div style={styles.statValue}>
+              {status?.stats?.totalVirtualTrades > 0 
+                ? ((status?.stats?.virtualWins / status?.stats?.totalVirtualTrades) * 100).toFixed(0) 
+                : 0}%
+            </div>
+            <div style={styles.statLabel}>Win Rate</div>
           </div>
         </div>
       </div>
@@ -319,6 +345,9 @@ const styles = {
   statItem: { textAlign: 'center', padding: 12, background: '#1a1a2e', borderRadius: 8 },
   statValue: { fontSize: 24, fontWeight: 700 },
   statLabel: { fontSize: 11, color: '#666', marginTop: 4 },
+  card2: { background: '#12121a', borderRadius: 12, padding: 20, border: '1px solid #1a1a2e', marginBottom: 30 },
+  statsRow: { display: 'flex', justifyContent: 'space-around' },
+  statItem2: { textAlign: 'center' },
   riskSection: { marginBottom: 30 },
   sectionTitle: { fontSize: 16, marginBottom: 16, color: '#fff' },
   riskButtons: { display: 'flex', gap: 12 },
