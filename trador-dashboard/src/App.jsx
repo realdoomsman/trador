@@ -12,8 +12,11 @@ function App() {
     { id: 'brain', title: 'AI Brain', open: false, minimized: false, x: 80, y: 60, z: 6 },
     { id: 'learning', title: 'Self-Learning', open: false, minimized: false, x: 100, y: 40, z: 5 },
     { id: 'trading', title: 'Trading System', open: false, minimized: false, x: 120, y: 60, z: 4 },
-    { id: 'roadmap', title: 'Roadmap', open: false, minimized: false, x: 140, y: 40, z: 3 },
-    { id: 'terminal', title: 'Terminal', open: false, minimized: false, x: 160, y: 60, z: 2 },
+    { id: 'techstack', title: 'Tech Stack', open: false, minimized: false, x: 140, y: 40, z: 3 },
+    { id: 'infrastructure', title: 'Infrastructure', open: false, minimized: false, x: 160, y: 60, z: 2 },
+    { id: 'apis', title: 'Data Sources', open: false, minimized: false, x: 180, y: 80, z: 1 },
+    { id: 'roadmap', title: 'Roadmap', open: false, minimized: false, x: 200, y: 40, z: 0 },
+    { id: 'terminal', title: 'Terminal', open: false, minimized: false, x: 220, y: 60, z: -1 },
   ]);
   const [startMenuOpen, setStartMenuOpen] = useState(false);
   const [aiStats, setAiStats] = useState(null);
@@ -147,7 +150,10 @@ function App() {
             <button className="main-btn" onClick={() => toggleWindow('brain')}>AI Brain</button>
             <button className="main-btn" onClick={() => toggleWindow('learning')}>Self-Learning</button>
             <button className="main-btn" onClick={() => toggleWindow('trading')}>Trading</button>
-            <button className="main-btn" onClick={() => toggleWindow('terminal')}>Terminal</button>
+            <button className="main-btn" onClick={() => toggleWindow('techstack')}>Tech Stack</button>
+            <button className="main-btn" onClick={() => toggleWindow('infrastructure')}>Infrastructure</button>
+            <button className="main-btn" onClick={() => toggleWindow('apis')}>Data Sources</button>
+            <button className="main-btn" onClick={() => toggleWindow('roadmap')}>Roadmap</button>
           </div>
 
           <div className="social-links">
@@ -350,6 +356,281 @@ function App() {
               <li>No known rugger wallets</li>
               <li>Passes RugCheck + GoPlus scans</li>
             </ul>
+          </div>
+        </div>
+      </Win>
+
+      <Win id="techstack" width={540}>
+        <div className="tech-win">
+          <div className="tech-header">Full Technical Stack - 100% Verifiable</div>
+          
+          <div className="tech-section">
+            <h3>Backend (Node.js)</h3>
+            <div className="tech-items">
+              <div className="tech-item">
+                <span className="ti-name">Runtime</span>
+                <span className="ti-val">Node.js v20 LTS</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Framework</span>
+                <span className="ti-val">Express.js REST API</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Process Manager</span>
+                <span className="ti-val">PM2 (auto-restart, logs)</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Data Storage</span>
+                <span className="ti-val">JSON files (training data)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="tech-section">
+            <h3>Frontend (React)</h3>
+            <div className="tech-items">
+              <div className="tech-item">
+                <span className="ti-name">Framework</span>
+                <span className="ti-val">React 18 + Vite</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Styling</span>
+                <span className="ti-val">Custom CSS (Win98 theme)</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">State</span>
+                <span className="ti-val">React Hooks (useState, useEffect)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="tech-section">
+            <h3>AI Models (5 Total)</h3>
+            <div className="tech-items">
+              <div className="tech-item">
+                <span className="ti-name">Google</span>
+                <span className="ti-val">Gemini 1.5 Flash</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">OpenAI</span>
+                <span className="ti-val">GPT-4o Mini</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Anthropic</span>
+                <span className="ti-val">Claude 3 Haiku</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Groq</span>
+                <span className="ti-val">Llama 3.1 70B</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">Perplexity</span>
+                <span className="ti-val">Llama 3.1 Sonar</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="tech-section">
+            <h3>Core Modules</h3>
+            <div className="tech-items">
+              <div className="tech-item">
+                <span className="ti-name">brain.js</span>
+                <span className="ti-val">Main trading logic, scoring</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">multiAI.js</span>
+                <span className="ti-val">AI consensus voting</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">learner.js</span>
+                <span className="ti-val">Self-learning from outcomes</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">analytics.js</span>
+                <span className="ti-val">60+ signal analysis</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">helius.js</span>
+                <span className="ti-val">Blockchain data fetching</span>
+              </div>
+              <div className="tech-item">
+                <span className="ti-name">walletIntel.js</span>
+                <span className="ti-val">Wallet pattern detection</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Win>
+
+      <Win id="infrastructure" width={520}>
+        <div className="infra-win">
+          <div className="infra-header">Infrastructure - Fully Transparent</div>
+          
+          <div className="infra-section">
+            <h3>Cloud Hosting</h3>
+            <div className="infra-box">
+              <div className="ib-row">
+                <span className="ib-label">Provider</span>
+                <span className="ib-value">Google Cloud Platform (GCP)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">Service</span>
+                <span className="ib-value">Compute Engine VM</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">Region</span>
+                <span className="ib-value">us-central1 (Iowa)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">Machine Type</span>
+                <span className="ib-value">e2-medium (2 vCPU, 4GB RAM)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">OS</span>
+                <span className="ib-value">Ubuntu 22.04 LTS</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">Uptime</span>
+                <span className="ib-value">24/7 (auto-restart on crash)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="infra-section">
+            <h3>Network Architecture</h3>
+            <div className="infra-box">
+              <div className="ib-row">
+                <span className="ib-label">Public Website</span>
+                <span className="ib-value">Port 80 (this site)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">AI API</span>
+                <span className="ib-value">Port 3003 (REST endpoints)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">Admin Dashboard</span>
+                <span className="ib-value">Port 443 (private)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="infra-section">
+            <h3>Process Management</h3>
+            <div className="infra-box">
+              <div className="ib-row">
+                <span className="ib-label">trador-ai</span>
+                <span className="ib-value">Main AI engine (always running)</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">trador-public</span>
+                <span className="ib-value">This website</span>
+              </div>
+              <div className="ib-row">
+                <span className="ib-label">trador-private</span>
+                <span className="ib-value">Admin dashboard</span>
+              </div>
+            </div>
+            <p className="infra-note">All processes managed by PM2 with auto-restart and log rotation.</p>
+          </div>
+
+          <div className="infra-section">
+            <h3>Why Google Cloud?</h3>
+            <ul>
+              <li>99.99% uptime SLA</li>
+              <li>Low latency to Solana RPC nodes</li>
+              <li>Scalable if trading volume increases</li>
+              <li>Enterprise-grade security</li>
+            </ul>
+          </div>
+        </div>
+      </Win>
+
+      <Win id="apis" width={560}>
+        <div className="apis-win">
+          <div className="apis-header">Data Sources & APIs</div>
+          <p className="apis-intro">All data comes from real, verifiable sources. No fake data. No simulations.</p>
+          
+          <div className="api-section">
+            <h3>Blockchain Data</h3>
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">B</span>
+                <span>Birdeye API</span>
+                <a href="https://birdeye.so" target="_blank" rel="noopener noreferrer" className="api-link">birdeye.so</a>
+              </div>
+              <div className="api-desc">Real-time Solana token prices, volume, market cap, holder counts, trading activity. Primary data source for token discovery.</div>
+              <div className="api-data">Provides: Price, Volume, Market Cap, Holders, Buy/Sell Pressure</div>
+            </div>
+            
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">H</span>
+                <span>Helius RPC</span>
+                <a href="https://helius.dev" target="_blank" rel="noopener noreferrer" className="api-link">helius.dev</a>
+              </div>
+              <div className="api-desc">Enhanced Solana RPC with token metadata, holder distribution, transaction history. Used for deep on-chain analysis.</div>
+              <div className="api-data">Provides: Holder Distribution, Top Wallets, Transaction History</div>
+            </div>
+
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">P</span>
+                <span>Pump.fun API</span>
+                <a href="https://pump.fun" target="_blank" rel="noopener noreferrer" className="api-link">pump.fun</a>
+              </div>
+              <div className="api-desc">Direct access to Pump.fun token data. Ensures we only analyze real Pump.fun tokens, not random Solana tokens.</div>
+              <div className="api-data">Provides: Token Verification, Bonding Curve Status, Creator Info</div>
+            </div>
+          </div>
+
+          <div className="api-section">
+            <h3>Price & Trading</h3>
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">J</span>
+                <span>Jupiter Aggregator</span>
+                <a href="https://jup.ag" target="_blank" rel="noopener noreferrer" className="api-link">jup.ag</a>
+              </div>
+              <div className="api-desc">Best price execution across all Solana DEXs. Will be used for actual trade execution when live trading begins.</div>
+              <div className="api-data">Provides: Price Quotes, Swap Routes, Slippage Calculation</div>
+            </div>
+
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">D</span>
+                <span>DexScreener</span>
+                <a href="https://dexscreener.com" target="_blank" rel="noopener noreferrer" className="api-link">dexscreener.com</a>
+              </div>
+              <div className="api-desc">Backup data source for token discovery and price verification. Cross-references with Birdeye data.</div>
+              <div className="api-data">Provides: Pair Data, Liquidity, Price Charts</div>
+            </div>
+          </div>
+
+          <div className="api-section">
+            <h3>Security Checks</h3>
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">R</span>
+                <span>RugCheck</span>
+                <a href="https://rugcheck.xyz" target="_blank" rel="noopener noreferrer" className="api-link">rugcheck.xyz</a>
+              </div>
+              <div className="api-desc">Automated rug pull detection. Checks mint authority, freeze authority, LP status, and known scammer wallets.</div>
+              <div className="api-data">Provides: Risk Score, Security Flags, LP Analysis</div>
+            </div>
+
+            <div className="api-item">
+              <div className="api-name">
+                <span className="api-icon">G</span>
+                <span>GoPlus Security</span>
+                <a href="https://gopluslabs.io" target="_blank" rel="noopener noreferrer" className="api-link">gopluslabs.io</a>
+              </div>
+              <div className="api-desc">Additional security layer. Detects honeypots, blacklisted addresses, and contract vulnerabilities.</div>
+              <div className="api-data">Provides: Honeypot Detection, Contract Analysis</div>
+            </div>
+          </div>
+
+          <div className="api-note">
+            <b>Verification:</b> You can verify any token data by checking the same APIs yourself. All contract addresses shown in the Live Feed can be looked up on Solscan, Birdeye, or Pump.fun.
           </div>
         </div>
       </Win>
