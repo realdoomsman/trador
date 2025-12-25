@@ -6,6 +6,8 @@ import analytics from './analytics.js';
 import learner from './learner.js';
 import alpha from './alpha.js';
 import walletIntel from './walletIntel.js';
+import multiAI from './multiAI.js';
+import externalTools from './externalTools.js';
 
 class TradingBrain {
   constructor() {
@@ -58,6 +60,10 @@ class TradingBrain {
     await walletIntel.initialize();
     const walletStats = walletIntel.getStats();
     console.log(`Wallet Intel: ${walletStats.totalKnownWallets} wallets, ${walletStats.clusters} clusters`);
+    
+    // Initialize multi-AI engine
+    const availableAIs = await multiAI.initialize();
+    console.log(`Multi-AI: ${availableAIs.length} AI models available`);
     
     // Load alpha engine state
     const alphaState = await storage.loadAlphaState();
@@ -243,6 +249,26 @@ class TradingBrain {
     // Get AI analysis (Gemini or rule-based)
     const geminiAnalysis = await gemini.analyzeToken(enrichedData, marketContext, this.state.patterns);
     
+    // MULTI-AI CONSENSUS - Get opinions from multiple AI models
+    let aiConsensus = null;
+    try {
+      aiConsensus = await multiAI.getConsensus(enrichedData, {
+        walletRisk: null,
+        hasDevRisk: false,
+        hasClusterRisk: false
+      });
+    } catch (err) {
+      // Continue without multi-AI
+    }
+    
+    // EXTERNAL SECURITY CHECK - RugCheck, GoPlus, etc.
+    let securityCheck = null;
+    try {
+      securityCheck = await externalTools.runSecurityCheck(tokenData.mint);
+    } catch (err) {
+      // Continue without security check
+    }
+    
     // Get alpha engine insights
     const momentumScore = alpha.calculateMomentumScore(enrichedData);
     const exitStrategy = alpha.selectExitStrategy(enrichedData, advancedAnalysis, alpha.marketRegime);
@@ -288,7 +314,17 @@ class TradingBrain {
       hasSniperRisk: walletAnalysis?.sniperWallets?.length > 0,
       hasClusterRisk: walletAnalysis?.clusters?.hasCoordinatedHolding || false,
       smartWalletsHolding: walletAnalysis?.profitableWallets?.length || 0,
-      walletSignals: walletAnalysis?.signals || []
+      walletSignals: walletAnalysis?.signals || [],
+      // Multi-AI consensus
+      aiConsensus: aiConsensus,
+      aiAgreement: aiConsensus?.agreement || 0,
+      aiSignal: aiConsensus?.consensus || 'HOLD',
+      aiCount: aiConsensus?.aiCount || 0,
+      // Security check
+      securityCheck: securityCheck,
+      securityRisk: securityCheck?.riskScore || 50,
+      securityFlags: securityCheck?.flags || [],
+      isSecure: securityCheck?.isSafe || false
     };
     
     // Adjust score based on wallet analysis
@@ -306,6 +342,29 @@ class TradingBrain {
       if (walletAnalysis.clusters?.hasCoordinatedHolding) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
         combinedAnalysis.flags.push('COORDINATED_HOLDING');
+      }
+    }
+    
+    // Adjust score based on multi-AI consensus
+    if (aiConsensus && aiConsensus.aiCount >= 2) {
+      if (aiConsensus.consensus === 'BUY' && aiConsensus.agreement >= 70) {
+        combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 10);
+        combinedAnalysis.flags.push('AI_CONSENSUS_BUY');
+      }
+      if (aiConsensus.consensus === 'SELL' && aiConsensus.agreement >= 70) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 15);
+        combinedAnalysis.flags.push('AI_CONSENSUS_SELL');
+      }
+    }
+    
+    // Adjust score based on security check
+    if (securityCheck) {
+      if (securityCheck.riskScore > 70) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
+        combinedAnalysis.flags.push('SECURITY_RISK');
+      }
+      if (securityCheck.isSafe) {
+        combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 5);
       }
     }
     
@@ -328,6 +387,12 @@ class TradingBrain {
     // WALLET RISK CHECK - Don't trade if wallet risk is too high
     if (analysis.walletRisk > 80) return false;
     if (analysis.hasClusterRisk) return false;
+    
+    // SECURITY CHECK - Don't trade if security risk is too high
+    if (analysis.securityRisk > 80) return false;
+    
+    // AI CONSENSUS CHECK - Don't trade if AIs say SELL
+    if (analysis.aiSignal === 'SELL' && analysis.aiAgreement > 60) return false;
     
     // Use advanced score
     const score = analysis.advancedScore || analysis.confidence || 0;
@@ -592,6 +657,10 @@ class TradingBrain {
       trackedClusters: walletStats.clusters,
       ruggerWallets: walletStats.ruggerWallets,
       profitableWalletsTracked: walletStats.profitableWallets,
+      // Multi-AI stats
+      multiAI: multiAI.getStatus(),
+      availableAIs: multiAI.getStatus().availableAIs,
+      aiModelsCount: multiAI.getStatus().aiCount,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns

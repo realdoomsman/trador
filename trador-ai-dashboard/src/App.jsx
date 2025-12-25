@@ -257,6 +257,31 @@ function App() {
             Tracking dev wallets, snipers, whales, insiders
           </div>
         </div>
+
+        {/* Multi-AI Engine */}
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>Multi-AI Engine</h2>
+          <div style={styles.aiGrid}>
+            <div style={styles.aiItem}>
+              <div style={{ ...styles.aiValue, color: status?.aiModelsCount > 0 ? '#00ff88' : '#666' }}>
+                {status?.aiModelsCount || 0}
+              </div>
+              <div style={styles.aiLabel}>AI Models</div>
+            </div>
+            <div style={styles.aiItem}>
+              <div style={styles.aiValue}>
+                {status?.availableAIs?.length > 0 ? status.availableAIs.join(', ') : 'None'}
+              </div>
+              <div style={styles.aiLabel}>Available</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 10, color: '#666', textAlign: 'center' }}>
+            {status?.aiModelsCount > 1 ? 'Multi-AI consensus active' : 'Add API keys for more AIs'}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 9, color: '#555', textAlign: 'center' }}>
+            Supports: Gemini, OpenAI, Claude, Groq, Perplexity
+          </div>
+        </div>
       </div>
 
       {/* Virtual Trading Stats */}
@@ -441,7 +466,12 @@ const styles = {
   walletGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   walletItem: { textAlign: 'center', padding: 10, background: '#1a1a2e', borderRadius: 6 },
   walletValue: { fontSize: 18, fontWeight: 700, color: '#00ccff' },
-  walletLabel: { fontSize: 10, color: '#666', marginTop: 2 }
+  walletLabel: { fontSize: 10, color: '#666', marginTop: 2 },
+  // Multi-AI styles
+  aiGrid: { display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 },
+  aiItem: { textAlign: 'center', padding: 10, background: '#1a1a2e', borderRadius: 6 },
+  aiValue: { fontSize: 14, fontWeight: 700, color: '#00ccff' },
+  aiLabel: { fontSize: 10, color: '#666', marginTop: 2 }
 };
 
 export default App;

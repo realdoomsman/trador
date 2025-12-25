@@ -101,6 +101,15 @@ app.get('/api/wallet-intel', (req, res) => {
   });
 });
 
+app.get('/api/multi-ai', (req, res) => {
+  const status = brain.getStatus();
+  res.json({
+    multiAI: status.multiAI,
+    availableAIs: status.availableAIs,
+    aiModelsCount: status.aiModelsCount
+  });
+});
+
 // Main scan loop with rate limiting
 async function scanLoop() {
   try {
