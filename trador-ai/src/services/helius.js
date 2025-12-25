@@ -176,14 +176,40 @@ class HeliusService {
       mint: t.address,
       symbol: t.symbol,
       name: t.name,
-      usd_market_cap: t.mc || t.realMc || 0,
-      virtual_sol_reserves: t.liquidity || 0,
-      holder_count: t.holder || 0,
-      created_timestamp: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+      // Price data
       price: t.price || 0,
-      volume24h: t.v24hUSD || 0,
+      priceChange30m: t.v30mChangePercent || 0,
+      priceChange1h: t.v1hChangePercent || 0,
+      priceChange4h: t.v4hChangePercent || 0,
       priceChange24h: t.v24hChangePercent || 0,
+      // Market data
+      usd_market_cap: t.mc || t.realMc || 0,
+      fdv: t.fdv || 0,
+      virtual_sol_reserves: t.liquidity || 0,
+      // Volume data
+      volume30m: t.v30mUSD || 0,
+      volume1h: t.v1hUSD || 0,
+      volume4h: t.v4hUSD || 0,
+      volume24h: t.v24hUSD || 0,
+      // Trading activity
       txns24h: t.trade24h || 0,
+      buys24h: t.buy24h || 0,
+      sells24h: t.sell24h || 0,
+      buyVolume24h: t.vBuy24hUSD || 0,
+      sellVolume24h: t.vSell24hUSD || 0,
+      // Holder data
+      holder_count: t.holder || 0,
+      // Unique wallets
+      uniqueWallet24h: t.uniqueWallet24h || 0,
+      // Supply info
+      supply: t.supply || 0,
+      circulatingSupply: t.circulatingSupply || 0,
+      // Timestamps
+      created_timestamp: t.createdAt || new Date().toISOString(),
+      lastTradeTime: t.lastTradeUnixTime || 0,
+      // Calculated metrics
+      buyPressure: t.buy24h && t.sell24h ? (t.buy24h / (t.buy24h + t.sell24h)) * 100 : 50,
+      volumeToMcap: t.mc ? (t.v24hUSD || 0) / t.mc : 0,
       source: 'birdeye'
     }));
   }

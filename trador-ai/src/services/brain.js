@@ -459,7 +459,47 @@ class TradingBrain {
       entryMarketCap: tokenData.usd_market_cap,
       entryTime: Date.now(),
       analysis: analysis,
-      tokenData: { ...tokenData }
+      // Store ALL token data for learning
+      tokenData: {
+        // Basic info
+        mint: tokenData.mint,
+        symbol: tokenData.symbol,
+        name: tokenData.name,
+        // Price metrics
+        price: tokenData.price,
+        priceChange30m: tokenData.priceChange30m || 0,
+        priceChange1h: tokenData.priceChange1h || 0,
+        priceChange4h: tokenData.priceChange4h || 0,
+        priceChange24h: tokenData.priceChange24h || 0,
+        // Market metrics
+        marketCap: tokenData.usd_market_cap || 0,
+        fdv: tokenData.fdv || 0,
+        liquidity: tokenData.virtual_sol_reserves || 0,
+        // Volume metrics
+        volume30m: tokenData.volume30m || 0,
+        volume1h: tokenData.volume1h || 0,
+        volume4h: tokenData.volume4h || 0,
+        volume24h: tokenData.volume24h || 0,
+        // Trading activity
+        txns24h: tokenData.txns24h || 0,
+        buys24h: tokenData.buys24h || 0,
+        sells24h: tokenData.sells24h || 0,
+        buyVolume24h: tokenData.buyVolume24h || 0,
+        sellVolume24h: tokenData.sellVolume24h || 0,
+        // Holder metrics
+        holders: tokenData.holder_count || 0,
+        uniqueWallets24h: tokenData.uniqueWallet24h || 0,
+        // Supply
+        supply: tokenData.supply || 0,
+        circulatingSupply: tokenData.circulatingSupply || 0,
+        // Calculated signals
+        buyPressure: tokenData.buyPressure || 50,
+        volumeToMcap: tokenData.volumeToMcap || 0,
+        // Time context
+        hour: new Date().getHours(),
+        dayOfWeek: new Date().getDay(),
+        timestamp: Date.now()
+      }
     });
     
     this.state.stats.tokensTracked++;
@@ -507,13 +547,33 @@ class TradingBrain {
           outcome,
           holdTimeMinutes: (now - tracked.entryTime) / 60000,
           analysis: tracked.analysis,
-          // What we can learn from
+          // All signals for pattern learning
           signals: {
-            marketCap: tracked.tokenData.usd_market_cap,
-            volume: tracked.tokenData.volume24h,
-            priceChange: tracked.tokenData.priceChange24h,
-            holders: tracked.tokenData.holder_count,
-            liquidity: tracked.tokenData.virtual_sol_reserves
+            // Price momentum
+            priceChange30m: tracked.tokenData.priceChange30m,
+            priceChange1h: tracked.tokenData.priceChange1h,
+            priceChange4h: tracked.tokenData.priceChange4h,
+            priceChange24h: tracked.tokenData.priceChange24h,
+            // Market size
+            marketCap: tracked.tokenData.marketCap,
+            fdv: tracked.tokenData.fdv,
+            liquidity: tracked.tokenData.liquidity,
+            // Volume signals
+            volume30m: tracked.tokenData.volume30m,
+            volume1h: tracked.tokenData.volume1h,
+            volume24h: tracked.tokenData.volume24h,
+            volumeToMcap: tracked.tokenData.volumeToMcap,
+            // Trading pressure
+            buys24h: tracked.tokenData.buys24h,
+            sells24h: tracked.tokenData.sells24h,
+            buyPressure: tracked.tokenData.buyPressure,
+            txns24h: tracked.tokenData.txns24h,
+            // Holder signals
+            holders: tracked.tokenData.holders,
+            uniqueWallets24h: tracked.tokenData.uniqueWallets24h,
+            // Time context
+            hour: tracked.tokenData.hour,
+            dayOfWeek: tracked.tokenData.dayOfWeek
           }
         };
 
