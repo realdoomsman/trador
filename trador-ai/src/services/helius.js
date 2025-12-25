@@ -330,12 +330,10 @@ class HeliusService {
     const txs = await this.getTokenTransactions(mintAddress, 500);
     const cutoff = Date.now() - (hours * 60 * 60 * 1000);
     
-    let buys = 0, sells = 0, volume = 0;
     const uniqueWallets = new Set();
     
     for (const tx of txs) {
       if (tx.blockTime * 1000 < cutoff) continue;
-      // Simplified analysis - in production you'd parse the actual swap instructions
       uniqueWallets.add(tx.signature.slice(0, 20));
     }
     
@@ -344,6 +342,273 @@ class HeliusService {
       uniqueWallets: uniqueWallets.size,
       recentActivity: txs.filter(t => t.blockTime * 1000 > cutoff).length
     };
+  }
+
+  // DEEP ON-CHAIN ANALYSIS - Get everything about a token
+  async getDeepTokenAnalysis(mintAddress) {
+    try {
+      const [holders, tokenInfo, securityInfo] = await Promise.all([
+        this.analyzeHolderDistribution(mintAddress),
+        this.getTokenSecurityInfo(mintAddress),
+        this.getBirdeyeTokenSecurity(mintAddress)
+      ]);
+
+      return {
+        holders,
+        security: { ...tokenInfo, ...securityInfo },
+        analyzed: true
+      };
+    } catch (err) {
+      return { analyzed: false, error: err.message };
+    }
+  }
+
+  // Analyze holder distribution - whales, distribution, concentration
+  async analyzeHolderDistribution(mintAddress) {
+    try {
+      const largestAccounts = await this.rpc('getTokenLargestAccounts', [mintAddress]);
+      if (!largestAccounts?.value) return null;
+
+      const holders = largestAccounts.value;
+      const totalHeld = holders.reduce((sum, h) => sum + parseFloat(h.amount), 0);
+      
+      // Analyze top holders
+      const top10 = holders.slice(0, 10);
+      const top10Percent = totalHeld > 0 ? (top10.reduce((sum, h) => sum + parseFloat(h.amount), 0) / totalHeld) * 100 : 0;
+      
+      // Whale detection (holders with >5% supply)
+      const whales = holders.filter(h => (parseFloat(h.amount) / totalHeld) > 0.05);
+      const whaleCount = whales.length;
+      const whalePercent = totalHeld > 0 ? (whales.reduce((sum, h) => sum + parseFloat(h.amount), 0) / totalHeld) * 100 : 0;
+      
+      // Top holder concentration
+      const top1Percent = holders[0] ? (parseFloat(holders[0].amount) / totalHeld) * 100 : 0;
+      const top5Percent = holders.slice(0, 5).reduce((sum, h) => sum + parseFloat(h.amount), 0) / totalHeld * 100;
+      
+      // Distribution score (lower = more concentrated = riskier)
+      // 100 = perfectly distributed, 0 = one holder owns everything
+      const distributionScore = Math.max(0, 100 - top10Percent);
+      
+      // Get wallet addresses of top holders
+      const topHolderAddresses = holders.slice(0, 5).map(h => h.address);
+      
+      return {
+        totalHolders: holders.length,
+        top1Percent: Math.round(top1Percent * 100) / 100,
+        top5Percent: Math.round(top5Percent * 100) / 100,
+        top10Percent: Math.round(top10Percent * 100) / 100,
+        whaleCount,
+        whalePercent: Math.round(whalePercent * 100) / 100,
+        distributionScore: Math.round(distributionScore),
+        topHolderAddresses,
+        // Risk flags
+        isHighlyConcentrated: top1Percent > 50,
+        hasWhaleRisk: whalePercent > 30,
+        isFairlyDistributed: distributionScore > 50
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Get token security info from Helius
+  async getTokenSecurityInfo(mintAddress) {
+    try {
+      // Get token supply info
+      const supplyInfo = await this.rpc('getTokenSupply', [mintAddress]);
+      
+      // Get mint account info
+      const mintInfo = await this.rpc('getAccountInfo', [mintAddress, { encoding: 'jsonParsed' }]);
+      const parsed = mintInfo?.value?.data?.parsed?.info;
+      
+      return {
+        decimals: parsed?.decimals || 0,
+        supply: supplyInfo?.value?.uiAmount || 0,
+        mintAuthority: parsed?.mintAuthority || null,
+        freezeAuthority: parsed?.freezeAuthority || null,
+        // Security flags
+        isMintable: !!parsed?.mintAuthority,
+        isFreezable: !!parsed?.freezeAuthority,
+        // Risk: if mint authority exists, more tokens can be created (dilution risk)
+        hasMintRisk: !!parsed?.mintAuthority,
+        hasFreezeRisk: !!parsed?.freezeAuthority
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Get security info from Birdeye
+  async getBirdeyeTokenSecurity(mintAddress) {
+    if (!this.birdeyeKey) return null;
+    
+    try {
+      const res = await fetch(`https://public-api.birdeye.so/defi/token_security?address=${mintAddress}`, {
+        headers: {
+          'X-API-KEY': this.birdeyeKey,
+          'x-chain': 'solana'
+        }
+      });
+      
+      if (!res.ok) return null;
+      const data = await res.json();
+      
+      if (!data.data) return null;
+      
+      return {
+        // Creator info
+        creatorAddress: data.data.creatorAddress,
+        creatorBalance: data.data.creatorBalance,
+        creatorPercentage: data.data.creatorPercentage,
+        // Ownership
+        ownerAddress: data.data.ownerAddress,
+        ownerBalance: data.data.ownerBalance,
+        ownerPercentage: data.data.ownerPercentage,
+        // Top 10 holders
+        top10HolderBalance: data.data.top10HolderBalance,
+        top10HolderPercent: data.data.top10HolderPercent,
+        // Liquidity info
+        totalLpAmount: data.data.totalLpAmount,
+        lpBurned: data.data.lpBurned,
+        lpBurnedPercent: data.data.lpBurnedPercent,
+        // Metadata
+        metaplexUpdateAuthority: data.data.metaplexUpdateAuthority,
+        metaplexOwnerUpdateAuthority: data.data.metaplexOwnerUpdateAuthority,
+        mutableMetadata: data.data.mutableMetadata,
+        // Risk flags
+        isLpBurned: data.data.lpBurnedPercent > 90,
+        creatorHoldsLot: data.data.creatorPercentage > 10,
+        top10Concentrated: data.data.top10HolderPercent > 50
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Get token overview from Birdeye (more detailed)
+  async getBirdeyeTokenOverview(mintAddress) {
+    if (!this.birdeyeKey) return null;
+    
+    try {
+      const res = await fetch(`https://public-api.birdeye.so/defi/token_overview?address=${mintAddress}`, {
+        headers: {
+          'X-API-KEY': this.birdeyeKey,
+          'x-chain': 'solana'
+        }
+      });
+      
+      if (!res.ok) return null;
+      const data = await res.json();
+      
+      if (!data.data) return null;
+      
+      return {
+        // Extended price data
+        price: data.data.price,
+        priceChange1h: data.data.priceChange1hPercent,
+        priceChange4h: data.data.priceChange4hPercent,
+        priceChange12h: data.data.priceChange12hPercent,
+        priceChange24h: data.data.priceChange24hPercent,
+        priceChange7d: data.data.priceChange7dPercent,
+        priceChange30d: data.data.priceChange30dPercent,
+        // ATH/ATL
+        ath: data.data.ath,
+        atl: data.data.atl,
+        athChangePercent: data.data.athChangePercent,
+        // Volume breakdown
+        volume1h: data.data.v1hUSD,
+        volume4h: data.data.v4hUSD,
+        volume12h: data.data.v12hUSD,
+        volume24h: data.data.v24hUSD,
+        // Trade counts
+        trade1h: data.data.trade1h,
+        trade4h: data.data.trade4h,
+        trade12h: data.data.trade12h,
+        trade24h: data.data.trade24h,
+        // Buy/Sell breakdown
+        buy1h: data.data.buy1h,
+        sell1h: data.data.sell1h,
+        buy4h: data.data.buy4h,
+        sell4h: data.data.sell4h,
+        buy24h: data.data.buy24h,
+        sell24h: data.data.sell24h,
+        // Unique traders
+        uniqueWallet1h: data.data.uniqueWallet1h,
+        uniqueWallet4h: data.data.uniqueWallet4h,
+        uniqueWallet24h: data.data.uniqueWallet24h,
+        // Market info
+        mc: data.data.mc,
+        realMc: data.data.realMc,
+        holder: data.data.holder,
+        liquidity: data.data.liquidity,
+        // Supply
+        supply: data.data.supply,
+        circulatingSupply: data.data.circulatingSupply,
+        // Calculated
+        buyPressure1h: data.data.buy1h && data.data.sell1h ? 
+          (data.data.buy1h / (data.data.buy1h + data.data.sell1h)) * 100 : 50,
+        buyPressure24h: data.data.buy24h && data.data.sell24h ? 
+          (data.data.buy24h / (data.data.buy24h + data.data.sell24h)) * 100 : 50
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Get recent trades for a token
+  async getBirdeyeRecentTrades(mintAddress, limit = 50) {
+    if (!this.birdeyeKey) return null;
+    
+    try {
+      const res = await fetch(`https://public-api.birdeye.so/defi/txs/token?address=${mintAddress}&limit=${limit}`, {
+        headers: {
+          'X-API-KEY': this.birdeyeKey,
+          'x-chain': 'solana'
+        }
+      });
+      
+      if (!res.ok) return null;
+      const data = await res.json();
+      
+      if (!data.data?.items) return null;
+      
+      const trades = data.data.items;
+      
+      // Analyze recent trades
+      const buys = trades.filter(t => t.side === 'buy');
+      const sells = trades.filter(t => t.side === 'sell');
+      
+      const avgBuySize = buys.length > 0 ? buys.reduce((sum, t) => sum + (t.volumeUSD || 0), 0) / buys.length : 0;
+      const avgSellSize = sells.length > 0 ? sells.reduce((sum, t) => sum + (t.volumeUSD || 0), 0) / sells.length : 0;
+      
+      // Whale trades (>$1000)
+      const whaleBuys = buys.filter(t => (t.volumeUSD || 0) > 1000).length;
+      const whaleSells = sells.filter(t => (t.volumeUSD || 0) > 1000).length;
+      
+      // Unique traders
+      const uniqueBuyers = new Set(buys.map(t => t.owner)).size;
+      const uniqueSellers = new Set(sells.map(t => t.owner)).size;
+      
+      return {
+        totalTrades: trades.length,
+        buyCount: buys.length,
+        sellCount: sells.length,
+        buyRatio: trades.length > 0 ? (buys.length / trades.length) * 100 : 50,
+        avgBuySize,
+        avgSellSize,
+        whaleBuys,
+        whaleSells,
+        whaleActivity: whaleBuys + whaleSells,
+        uniqueBuyers,
+        uniqueSellers,
+        // Signals
+        isBuyHeavy: buys.length > sells.length * 1.5,
+        isSellHeavy: sells.length > buys.length * 1.5,
+        hasWhaleInterest: whaleBuys > 2
+      };
+    } catch (err) {
+      return null;
+    }
   }
 }
 

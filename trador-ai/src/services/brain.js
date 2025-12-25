@@ -214,8 +214,8 @@ class TradingBrain {
     // Collect data point for learning
     await this.collectDataPoint(tokenData, null, null);
     
-    // Track this token to learn outcome later
-    this.trackToken(enrichedData, analysis);
+    // Track this token to learn outcome later (with deep analysis)
+    await this.trackToken(enrichedData, analysis);
 
     return {
       token: enrichedData,
@@ -440,8 +440,8 @@ class TradingBrain {
     };
   }
 
-  // Track a token to learn its outcome
-  trackToken(tokenData, analysis) {
+  // Track a token to learn its outcome - WITH DEEP ANALYSIS
+  async trackToken(tokenData, analysis) {
     if (this.trackedTokens.size >= this.maxTrackedTokens) {
       // Remove oldest tracked token
       const oldest = [...this.trackedTokens.entries()].sort((a, b) => a[1].entryTime - b[1].entryTime)[0];
@@ -450,6 +450,25 @@ class TradingBrain {
 
     const price = tokenData.price || (tokenData.usd_market_cap / 1e9) || 0;
     if (price <= 0) return;
+
+    // Get deep on-chain analysis (holder distribution, security, etc)
+    let deepAnalysis = null;
+    let recentTrades = null;
+    let tokenOverview = null;
+    
+    try {
+      // Run deep analysis in parallel
+      const [deep, trades, overview] = await Promise.all([
+        helius.getDeepTokenAnalysis(tokenData.mint),
+        helius.getBirdeyeRecentTrades(tokenData.mint, 30),
+        helius.getBirdeyeTokenOverview(tokenData.mint)
+      ]);
+      deepAnalysis = deep;
+      recentTrades = trades;
+      tokenOverview = overview;
+    } catch (err) {
+      // Continue without deep analysis
+    }
 
     this.trackedTokens.set(tokenData.mint, {
       mint: tokenData.mint,
@@ -499,7 +518,12 @@ class TradingBrain {
         hour: new Date().getHours(),
         dayOfWeek: new Date().getDay(),
         timestamp: Date.now()
-      }
+      },
+      // DEEP ON-CHAIN DATA
+      holderAnalysis: deepAnalysis?.holders || null,
+      securityAnalysis: deepAnalysis?.security || null,
+      recentTrades: recentTrades || null,
+      tokenOverview: tokenOverview || null
     });
     
     this.state.stats.tokensTracked++;
@@ -537,7 +561,7 @@ class TradingBrain {
           this.state.stats.neutral++;
         }
 
-        // Save learning data with outcome
+        // Save learning data with outcome - SUPER DETAILED
         const learningData = {
           timestamp: Date.now(),
           token: tracked.tokenData,
@@ -547,33 +571,91 @@ class TradingBrain {
           outcome,
           holdTimeMinutes: (now - tracked.entryTime) / 60000,
           analysis: tracked.analysis,
-          // All signals for pattern learning
-          signals: {
-            // Price momentum
+          
+          // PRICE & MOMENTUM SIGNALS
+          priceSignals: {
             priceChange30m: tracked.tokenData.priceChange30m,
             priceChange1h: tracked.tokenData.priceChange1h,
             priceChange4h: tracked.tokenData.priceChange4h,
-            priceChange24h: tracked.tokenData.priceChange24h,
-            // Market size
+            priceChange24h: tracked.tokenData.priceChange24h
+          },
+          
+          // MARKET SIZE SIGNALS
+          marketSignals: {
             marketCap: tracked.tokenData.marketCap,
             fdv: tracked.tokenData.fdv,
             liquidity: tracked.tokenData.liquidity,
-            // Volume signals
+            mcapToLiquidity: tracked.tokenData.liquidity > 0 ? tracked.tokenData.marketCap / tracked.tokenData.liquidity : 0
+          },
+          
+          // VOLUME SIGNALS
+          volumeSignals: {
             volume30m: tracked.tokenData.volume30m,
             volume1h: tracked.tokenData.volume1h,
             volume24h: tracked.tokenData.volume24h,
-            volumeToMcap: tracked.tokenData.volumeToMcap,
-            // Trading pressure
+            volumeToMcap: tracked.tokenData.volumeToMcap
+          },
+          
+          // TRADING PRESSURE SIGNALS
+          tradingSignals: {
             buys24h: tracked.tokenData.buys24h,
             sells24h: tracked.tokenData.sells24h,
             buyPressure: tracked.tokenData.buyPressure,
             txns24h: tracked.tokenData.txns24h,
-            // Holder signals
+            buyToSellRatio: tracked.tokenData.sells24h > 0 ? tracked.tokenData.buys24h / tracked.tokenData.sells24h : 1
+          },
+          
+          // HOLDER SIGNALS
+          holderSignals: {
             holders: tracked.tokenData.holders,
             uniqueWallets24h: tracked.tokenData.uniqueWallets24h,
-            // Time context
+            // Deep holder analysis
+            top1Percent: tracked.holderAnalysis?.top1Percent || null,
+            top5Percent: tracked.holderAnalysis?.top5Percent || null,
+            top10Percent: tracked.holderAnalysis?.top10Percent || null,
+            whaleCount: tracked.holderAnalysis?.whaleCount || null,
+            whalePercent: tracked.holderAnalysis?.whalePercent || null,
+            distributionScore: tracked.holderAnalysis?.distributionScore || null,
+            isHighlyConcentrated: tracked.holderAnalysis?.isHighlyConcentrated || null,
+            hasWhaleRisk: tracked.holderAnalysis?.hasWhaleRisk || null
+          },
+          
+          // SECURITY SIGNALS
+          securitySignals: {
+            isMintable: tracked.securityAnalysis?.isMintable || null,
+            isFreezable: tracked.securityAnalysis?.isFreezable || null,
+            hasMintRisk: tracked.securityAnalysis?.hasMintRisk || null,
+            hasFreezeRisk: tracked.securityAnalysis?.hasFreezeRisk || null,
+            creatorPercentage: tracked.securityAnalysis?.creatorPercentage || null,
+            ownerPercentage: tracked.securityAnalysis?.ownerPercentage || null,
+            lpBurnedPercent: tracked.securityAnalysis?.lpBurnedPercent || null,
+            isLpBurned: tracked.securityAnalysis?.isLpBurned || null,
+            mutableMetadata: tracked.securityAnalysis?.mutableMetadata || null
+          },
+          
+          // RECENT TRADE SIGNALS
+          recentTradeSignals: {
+            buyCount: tracked.recentTrades?.buyCount || null,
+            sellCount: tracked.recentTrades?.sellCount || null,
+            buyRatio: tracked.recentTrades?.buyRatio || null,
+            avgBuySize: tracked.recentTrades?.avgBuySize || null,
+            avgSellSize: tracked.recentTrades?.avgSellSize || null,
+            whaleBuys: tracked.recentTrades?.whaleBuys || null,
+            whaleSells: tracked.recentTrades?.whaleSells || null,
+            uniqueBuyers: tracked.recentTrades?.uniqueBuyers || null,
+            uniqueSellers: tracked.recentTrades?.uniqueSellers || null,
+            isBuyHeavy: tracked.recentTrades?.isBuyHeavy || null,
+            isSellHeavy: tracked.recentTrades?.isSellHeavy || null,
+            hasWhaleInterest: tracked.recentTrades?.hasWhaleInterest || null
+          },
+          
+          // TIME CONTEXT
+          timeSignals: {
             hour: tracked.tokenData.hour,
-            dayOfWeek: tracked.tokenData.dayOfWeek
+            dayOfWeek: tracked.tokenData.dayOfWeek,
+            isWeekend: tracked.tokenData.dayOfWeek === 0 || tracked.tokenData.dayOfWeek === 6,
+            isUSMarketHours: tracked.tokenData.hour >= 13 && tracked.tokenData.hour <= 21, // UTC
+            isAsiaHours: tracked.tokenData.hour >= 0 && tracked.tokenData.hour <= 8
           }
         };
 
