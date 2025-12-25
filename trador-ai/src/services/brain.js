@@ -454,7 +454,9 @@ class TradingBrain {
       flags: combinedAnalysis.flags?.slice(0, 5) || [],
       holders: enrichedData.holders || 0,
       liquidity: enrichedData.liquidity || 0,
-      priceChange24h: enrichedData.priceChange24h || 0
+      priceChange24h: enrichedData.priceChange24h || 0,
+      isPumpFun: tokenData.isPumpFun || false,
+      source: tokenData.source || 'unknown'
     });
     if (this.recentAnalyses.length > this.maxRecentAnalyses) {
       this.recentAnalyses = this.recentAnalyses.slice(0, this.maxRecentAnalyses);

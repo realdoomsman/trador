@@ -113,50 +113,206 @@ class HeliusService {
     }
   }
 
-  // Get new Solana tokens from multiple sources
+  // Get ONLY real Pump.fun tokens
   async getPumpFunTokens() {
-    // Try Birdeye API first (best for real Pump.fun data)
+    // Try Pump.fun API directly first (guaranteed real pump.fun tokens)
+    try {
+      const tokens = await this.getPumpFunCoins();
+      if (tokens && tokens.length > 0) {
+        this.dataSource = 'pumpfun';
+        console.log(`[PUMP.FUN] Fetched ${tokens.length} REAL pump.fun tokens`);
+        return tokens;
+      }
+    } catch (e) {
+      console.error('Pump.fun API failed:', e.message);
+    }
+
+    // Backup: DexScreener filtered to pump.fun only
+    try {
+      const tokens = await this.getDexScreenerPumpFunTokens();
+      if (tokens && tokens.length > 0) {
+        this.dataSource = 'dexscreener-pumpfun';
+        console.log(`[DEXSCREENER] Fetched ${tokens.length} pump.fun tokens`);
+        return tokens;
+      }
+    } catch (e) {
+      console.error('DexScreener pump.fun failed:', e.message);
+    }
+
+    // Last resort: Birdeye but verify each token on pump.fun
     if (this.birdeyeKey) {
       try {
-        const tokens = await this.getBirdeyeTokens();
+        const tokens = await this.getBirdeyeTokensVerified();
         if (tokens && tokens.length > 0) {
-          this.dataSource = 'birdeye';
-          console.log(`[REAL DATA] Fetched ${tokens.length} tokens from Birdeye`);
+          this.dataSource = 'birdeye-verified';
+          console.log(`[BIRDEYE] Fetched ${tokens.length} verified pump.fun tokens`);
           return tokens;
         }
       } catch (e) {
-        console.error('Birdeye API failed:', e.message);
+        console.error('Birdeye verified failed:', e.message);
       }
-    }
-
-    // Try DexScreener as backup
-    try {
-      const tokens = await this.getDexScreenerTokens();
-      if (tokens && tokens.length > 0) {
-        this.dataSource = 'dexscreener';
-        console.log(`[REAL DATA] Fetched ${tokens.length} tokens from DexScreener`);
-        return tokens;
-      }
-    } catch (e) {
-      console.error('DexScreener API failed:', e.message);
-    }
-
-    // Try Helius DAS API for recent tokens
-    try {
-      const tokens = await this.getHeliusTokens();
-      if (tokens && tokens.length > 0) {
-        this.dataSource = 'helius';
-        console.log(`[REAL DATA] Fetched ${tokens.length} tokens from Helius`);
-        return tokens;
-      }
-    } catch (e) {
-      console.error('Helius API failed:', e.message);
     }
 
     // Fallback: Generate synthetic training data
     this.dataSource = 'synthetic';
     console.log('[SYNTHETIC DATA] All APIs failed, using synthetic data for training...');
     return this.generateSyntheticTokens(50);
+  }
+
+  // Get coins directly from Pump.fun API
+  async getPumpFunCoins() {
+    const tokens = [];
+    
+    // Fetch from multiple pump.fun endpoints
+    const endpoints = [
+      'https://frontend-api.pump.fun/coins?offset=0&limit=50&sort=last_trade_timestamp&order=DESC&includeNsfw=false',
+      'https://frontend-api.pump.fun/coins?offset=0&limit=50&sort=market_cap&order=DESC&includeNsfw=false'
+    ];
+    
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0'
+          }
+        });
+        
+        if (!res.ok) continue;
+        const data = await res.json();
+        
+        if (Array.isArray(data)) {
+          for (const coin of data) {
+            // Skip if already added
+            if (tokens.find(t => t.mint === coin.mint)) continue;
+            
+            tokens.push({
+              mint: coin.mint,
+              symbol: coin.symbol,
+              name: coin.name,
+              price: 0, // Will be enriched later
+              priceChange24h: 0,
+              usd_market_cap: coin.usd_market_cap || 0,
+              virtual_sol_reserves: coin.virtual_sol_reserves || 0,
+              holder_count: 0,
+              volume24h: 0,
+              txns24h: 0,
+              created_timestamp: coin.created_timestamp || new Date().toISOString(),
+              source: 'pumpfun',
+              isPumpFun: true,
+              // Pump.fun specific data
+              bondingCurve: coin.bonding_curve,
+              associatedBondingCurve: coin.associated_bonding_curve,
+              creator: coin.creator,
+              description: coin.description,
+              imageUri: coin.image_uri,
+              twitter: coin.twitter,
+              telegram: coin.telegram,
+              website: coin.website,
+              complete: coin.complete, // Has it graduated from bonding curve?
+              kingOfTheHillTimestamp: coin.king_of_the_hill_timestamp
+            });
+          }
+        }
+      } catch (e) {
+        console.error(`Pump.fun endpoint failed: ${e.message}`);
+      }
+    }
+    
+    // Enrich with Birdeye data if available
+    if (tokens.length > 0 && this.birdeyeKey) {
+      await this.enrichPumpFunTokens(tokens);
+    }
+    
+    return tokens;
+  }
+
+  // Enrich pump.fun tokens with Birdeye market data
+  async enrichPumpFunTokens(tokens) {
+    try {
+      // Get prices and volume from Birdeye for these specific tokens
+      const mints = tokens.slice(0, 30).map(t => t.mint);
+      
+      for (const mint of mints) {
+        try {
+          const overview = await this.getBirdeyeTokenOverview(mint);
+          if (overview) {
+            const token = tokens.find(t => t.mint === mint);
+            if (token) {
+              token.price = overview.price || 0;
+              token.priceChange24h = overview.priceChange24h || 0;
+              token.volume24h = overview.volume24h || 0;
+              token.holder_count = overview.holder || 0;
+              token.usd_market_cap = overview.mc || overview.realMc || token.usd_market_cap;
+              token.txns24h = overview.trade24h || 0;
+              token.buyPressure = overview.buyPressure24h || 50;
+            }
+          }
+          // Small delay to avoid rate limits
+          await new Promise(r => setTimeout(r, 100));
+        } catch (e) {
+          // Skip enrichment for this token
+        }
+      }
+    } catch (e) {
+      console.error('Token enrichment failed:', e.message);
+    }
+  }
+
+  // Get pump.fun tokens from DexScreener
+  async getDexScreenerPumpFunTokens() {
+    const res = await fetch('https://api.dexscreener.com/latest/dex/search?q=pump.fun', {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!res.ok) return [];
+    
+    const data = await res.json();
+    if (!data.pairs) return [];
+    
+    // Filter to only Solana pump.fun pairs
+    const pumpFunPairs = data.pairs.filter(pair => 
+      pair.chainId === 'solana' && 
+      (pair.dexId === 'pumpfun' || pair.url?.includes('pump.fun'))
+    );
+    
+    return pumpFunPairs.slice(0, 50).map(pair => ({
+      ...this.formatDexScreenerToken(pair),
+      source: 'dexscreener-pumpfun',
+      isPumpFun: true
+    }));
+  }
+
+  // Get Birdeye tokens but verify each one exists on pump.fun
+  async getBirdeyeTokensVerified() {
+    const birdeyeTokens = await this.getBirdeyeTokens();
+    if (!birdeyeTokens || birdeyeTokens.length === 0) return [];
+    
+    const verifiedTokens = [];
+    
+    // Check each token against pump.fun (limit to avoid too many requests)
+    for (const token of birdeyeTokens.slice(0, 30)) {
+      try {
+        const pumpData = await this.getPumpFunToken(token.mint);
+        if (pumpData && pumpData.mint) {
+          // Token exists on pump.fun!
+          verifiedTokens.push({
+            ...token,
+            source: 'birdeye-verified',
+            isPumpFun: true,
+            bondingCurve: pumpData.bonding_curve,
+            complete: pumpData.complete
+          });
+          console.log(`[VERIFIED] ${token.symbol} is a real pump.fun token`);
+        }
+        // Small delay to avoid rate limits
+        await new Promise(r => setTimeout(r, 50));
+      } catch (e) {
+        // Token doesn't exist on pump.fun, skip it
+      }
+    }
+    
+    return verifiedTokens;
   }
 
   // Birdeye API - Best source for Solana tokens

@@ -207,3 +207,14 @@ h4 { color: #333; margin-bottom: 4px; font-size: 11px; }
 .fi-link:hover { background: #e8e8ff; text-decoration: underline; }
 .fi-ca { margin: 4px 0; }
 .fi-ca .fi-mint { font-family: monospace; font-size: 9px; color: #666; word-break: break-all; background: #f5f5f5; padding: 2px 4px; display: block; border: 1px solid #ddd; }
+
+/* Pump.fun verified badge */
+.fi-verified { background: linear-gradient(135deg, #00d4aa, #00aa88); color: #fff; font-size: 9px; padding: 1px 5px; font-weight: bold; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.fi-source { font-size: 9px; color: #999; font-style: italic; }
+.fi-contract { display: flex; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; align-items: center; }
+.fi-copy { background: var(--win); border: 1px solid var(--win-dark); padding: 2px 6px; font-size: 10px; cursor: pointer; }
+.fi-copy:hover { background: #d4d4d4; }
+.fi-link { font-size: 10px; color: var(--blue); text-decoration: none; }
+.fi-link:hover { text-decoration: underline; }
+.fi-ca { margin-bottom: 4px; }
+.fi-mint { font-size: 9px; color: #999; font-family: monospace; word-break: break-all; }

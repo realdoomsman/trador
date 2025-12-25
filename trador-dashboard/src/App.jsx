@@ -423,6 +423,7 @@ function App() {
                 <div key={i} className={`feed-item ${t.shouldTrade ? 'trade' : ''} ${t.recommendation === 'STRONG_BUY' ? 'hot' : ''}`}>
                   <div className="fi-main">
                     <span className="fi-symbol">{t.symbol}</span>
+                    {t.isPumpFun && <span className="fi-verified">PUMP.FUN</span>}
                     <span className="fi-mcap">${(t.marketCap/1000).toFixed(0)}k</span>
                     <span className={`fi-score ${t.score >= 70 ? 'high' : t.score >= 50 ? 'med' : 'low'}`}>{t.score}</span>
                     <span className={`fi-rec ${t.recommendation?.toLowerCase()}`}>{t.recommendation}</span>
@@ -442,6 +443,7 @@ function App() {
                     <span className="fi-ai">AI: {t.aiVotes?.buy || 0}B/{t.aiVotes?.sell || 0}S/{t.aiVotes?.hold || 0}H</span>
                     <span className="fi-holders">{t.holders} holders</span>
                     <span className="fi-liq">{(t.liquidity || 0).toFixed(1)} SOL</span>
+                    {t.source && <span className="fi-source">{t.source}</span>}
                   </div>
                   {t.flags?.length > 0 && (
                     <div className="fi-flags">
