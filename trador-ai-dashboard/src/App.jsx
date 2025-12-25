@@ -179,13 +179,23 @@ function App() {
               <div style={styles.statLabel}>Dumps</div>
             </div>
             <div style={styles.statItem}>
-              <div style={styles.statValue}>{status?.stats?.neutral || 0}</div>
-              <div style={styles.statLabel}>Neutral</div>
+              <div style={{ 
+                ...styles.statValue, 
+                color: (status?.aiAccuracy || 0) >= 60 ? '#00ff88' : (status?.aiAccuracy || 0) >= 50 ? '#ffcc00' : '#ff4444' 
+              }}>
+                {(status?.aiAccuracy || 0).toFixed(1)}%
+              </div>
+              <div style={styles.statLabel}>AI Accuracy</div>
             </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: '#666', textAlign: 'center' }}>
-            Tokens tracked for 30min to learn outcomes
+          <div style={{ marginTop: 12, fontSize: 11, color: '#888', textAlign: 'center' }}>
+            {status?.aiPredictions || 0} predictions | {status?.aiRecommendation || 'Learning...'}
           </div>
+          {status?.topSignals?.length > 0 && (
+            <div style={{ marginTop: 8, fontSize: 10, color: '#666', textAlign: 'center' }}>
+              Top signals: {status.topSignals.slice(0, 3).join(', ')}
+            </div>
+          )}
         </div>
       </div>
 

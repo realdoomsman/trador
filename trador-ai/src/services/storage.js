@@ -140,6 +140,46 @@ class CloudStorage {
     }
     return trades;
   }
+
+  // Save learner state (self-learning AI)
+  async saveLearnerState(state) {
+    const localPath = path.join(this.localCache, 'learner_state.json');
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, JSON.stringify(state, null, 2));
+  }
+
+  // Load learner state
+  async loadLearnerState() {
+    const localPath = path.join(this.localCache, 'learner_state.json');
+    if (fs.existsSync(localPath)) {
+      return JSON.parse(fs.readFileSync(localPath, 'utf8'));
+    }
+    return null;
+  }
+
+  // Save outcome for learning
+  async saveOutcome(outcome) {
+    const dir = path.join(this.localCache, 'outcomes');
+    fs.mkdirSync(dir, { recursive: true });
+    const filename = `${Date.now()}_${outcome.outcome}.json`;
+    fs.writeFileSync(path.join(dir, filename), JSON.stringify(outcome));
+  }
+
+  // Load recent outcomes for optimization
+  async loadRecentOutcomes(limit = 100) {
+    const dir = path.join(this.localCache, 'outcomes');
+    if (!fs.existsSync(dir)) return [];
+    
+    const files = fs.readdirSync(dir).sort().slice(-limit);
+    const outcomes = [];
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(path.join(dir, file), 'utf8');
+        outcomes.push(JSON.parse(content));
+      } catch (err) {}
+    }
+    return outcomes;
+  }
 }
 
 export default new CloudStorage();

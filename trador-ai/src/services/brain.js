@@ -3,6 +3,7 @@ import storage from './storage.js';
 import gemini from './gemini.js';
 import helius from './helius.js';
 import analytics from './analytics.js';
+import learner from './learner.js';
 
 class TradingBrain {
   constructor() {
@@ -47,6 +48,9 @@ class TradingBrain {
 
   async initialize() {
     console.log('Initializing Trading Brain...');
+    
+    // Initialize self-learner
+    await learner.initialize();
     
     // Load saved state
     const savedState = await storage.loadModelState();
@@ -456,6 +460,8 @@ class TradingBrain {
       ? `${(dataSizeMB / 1024).toFixed(2)} GB` 
       : `${dataSizeMB.toFixed(2)} MB`;
 
+    const learnerStrategy = learner.getStrategy();
+
     return {
       confidence: this.state.confidence,
       dataPoints: this.state.dataPoints,
@@ -469,6 +475,11 @@ class TradingBrain {
       pnl: this.state.pnl,
       stats: this.state.stats,
       trackedTokens: this.trackedTokens.size,
+      // Self-learning AI stats
+      aiAccuracy: learnerStrategy.performance.accuracy,
+      aiPredictions: learnerStrategy.performance.totalPredictions,
+      topSignals: learnerStrategy.topSignals,
+      aiRecommendation: learnerStrategy.recommendation,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns
@@ -690,17 +701,22 @@ class TradingBrain {
             hour: tracked.tokenData.hour,
             dayOfWeek: tracked.tokenData.dayOfWeek,
             isWeekend: tracked.tokenData.dayOfWeek === 0 || tracked.tokenData.dayOfWeek === 6,
-            isUSMarketHours: tracked.tokenData.hour >= 13 && tracked.tokenData.hour <= 21, // UTC
+            isUSMarketHours: tracked.tokenData.hour >= 13 && tracked.tokenData.hour <= 21,
             isAsiaHours: tracked.tokenData.hour >= 0 && tracked.tokenData.hour <= 8
           }
         };
 
         this.dataBuffer.push(learningData);
         
+        // SELF-LEARNING: Teach the AI from this outcome
+        const flatSignals = learner.flattenSignals(learningData);
+        await learner.learnFromOutcome(flatSignals, outcome, pnlPercent);
+        await storage.saveOutcome({ signals: flatSignals, outcome, pnlPercent, timestamp: Date.now() });
+        
         if (outcome === 'pump') {
-          console.log(`LEARNED: ${tracked.symbol} pumped ${pnlPercent.toFixed(1)}%`);
+          console.log(`LEARNED: ${tracked.symbol} pumped ${pnlPercent.toFixed(1)}% | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
         } else if (outcome === 'dump') {
-          console.log(`LEARNED: ${tracked.symbol} dumped ${pnlPercent.toFixed(1)}%`);
+          console.log(`LEARNED: ${tracked.symbol} dumped ${pnlPercent.toFixed(1)}% | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
         }
 
         toRemove.push(mint);
@@ -711,6 +727,13 @@ class TradingBrain {
 
     // Clean up
     toRemove.forEach(mint => this.trackedTokens.delete(mint));
+    
+    // Auto-optimize every 50 outcomes
+    if (this.state.stats.pumps + this.state.stats.dumps > 0 && 
+        (this.state.stats.pumps + this.state.stats.dumps) % 50 === 0) {
+      const recentOutcomes = await storage.loadRecentOutcomes(100);
+      await learner.autoOptimize(recentOutcomes);
+    }
     
     // Flush if we have enough data
     if (this.dataBuffer.length >= 20) {
