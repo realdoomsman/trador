@@ -164,3 +164,34 @@ h4 { color: #333; margin-bottom: 4px; font-size: 11px; }
 .win-body::-webkit-scrollbar-thumb { background: var(--win-bg); border: 2px solid; border-color: var(--win-light) var(--win-dark) var(--win-dark) var(--win-light); }
 
 @media (max-width: 768px) { .window { width: 95vw !important; left: 2.5vw !important; } .icons { display: none; } .hero-stats { flex-wrap: wrap; } .nav-grid { grid-template-columns: 1fr; } }
+
+/* Live Feed */
+.feed-win {}
+.feed-header { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--win-dark); margin-bottom: 8px; }
+.feed-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; }
+.feed-dot.on { background: var(--green); animation: pulse 2s infinite; }
+.feed-count { margin-left: auto; font-size: 10px; color: #666; }
+.feed-list { max-height: 400px; overflow-y: auto; }
+.feed-item { background: #fff; border: 1px solid var(--win-dark); padding: 8px; margin-bottom: 4px; }
+.feed-item.trade { border-left: 3px solid var(--green); }
+.feed-item.hot { background: linear-gradient(90deg, #ffffd4, #fff); }
+.fi-main { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.fi-symbol { font-weight: bold; font-size: 13px; min-width: 80px; }
+.fi-mcap { font-size: 11px; color: #666; min-width: 50px; }
+.fi-score { font-weight: bold; padding: 2px 6px; font-size: 11px; }
+.fi-score.high { background: #d4ffd4; color: var(--green); }
+.fi-score.med { background: #ffffd4; color: var(--yellow); }
+.fi-score.low { background: #ffd4d4; color: var(--red); }
+.fi-rec { font-size: 10px; padding: 2px 6px; text-transform: uppercase; }
+.fi-rec.buy, .fi-rec.strong_buy { background: var(--green); color: #fff; }
+.fi-rec.sell { background: var(--red); color: #fff; }
+.fi-rec.hold, .fi-rec.avoid { background: var(--win-dark); color: #fff; }
+.fi-details { display: flex; gap: 12px; font-size: 10px; color: #666; }
+.fi-trade { background: var(--green); color: #fff; padding: 1px 6px; font-weight: bold; }
+.fi-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.fi-flag { font-size: 9px; padding: 1px 4px; border: 1px solid; }
+.fi-flag.red { background: #ffd4d4; border-color: var(--red); color: #660000; }
+.fi-flag.green { background: #d4ffd4; border-color: var(--green); color: #006600; }
+.fi-flag.yellow { background: #ffffd4; border-color: var(--yellow); color: #666600; }
+.feed-empty { text-align: center; padding: 40px; color: #666; }
+.main-btn.hot { background: linear-gradient(135deg, var(--green), #00aa00); color: #fff; }
