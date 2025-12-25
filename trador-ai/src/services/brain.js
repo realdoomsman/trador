@@ -426,10 +426,17 @@ class TradingBrain {
     // Track this token to learn outcome later (with deep analysis)
     await this.trackToken(enrichedData, combinedAnalysis);
 
+    // VERBOSE LOGGING - Show what the AI is thinking
+    const shouldTrade = this.shouldTradeAdvanced(combinedAnalysis);
+    const aiVotes = aiConsensus ? `${aiConsensus.votes?.buy || 0}B/${aiConsensus.votes?.sell || 0}S/${aiConsensus.votes?.hold || 0}H` : 'N/A';
+    const topFlags = combinedAnalysis.flags?.slice(0, 3).join(', ') || 'none';
+    
+    console.log(`[ANALYZE] ${enrichedData.symbol} | $${(marketCap/1000).toFixed(0)}k mcap | Score: ${combinedAnalysis.advancedScore || 0} | AI: ${aiVotes} | ${combinedAnalysis.advancedRecommendation || 'HOLD'} | ${shouldTrade ? 'TRADE' : 'SKIP'} | Flags: ${topFlags}`);
+
     return {
       token: enrichedData,
       analysis: combinedAnalysis,
-      shouldTrade: this.shouldTradeAdvanced(combinedAnalysis)
+      shouldTrade
     };
   }
 
