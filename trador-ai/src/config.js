@@ -81,10 +81,10 @@ export default {
     }
   },
   
-  // Data collection intervals (faster with Birdeye Starter plan)
-  scanInterval: 30000,          // 30 seconds - 2x faster scanning
+  // Data collection intervals (optimized for Birdeye Standard - 500 req/min)
+  scanInterval: 20000,          // 20 seconds - faster scanning with Standard plan
   priceUpdateInterval: 10000,   // 10 seconds
-  analysisInterval: 30000,      // 30 seconds
+  analysisInterval: 20000,      // 20 seconds
   
   // Learning thresholds (lowered for faster iteration)
   minDataPointsForTraining: 50,

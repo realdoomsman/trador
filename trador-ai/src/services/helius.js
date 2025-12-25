@@ -319,26 +319,28 @@ class HeliusService {
     return verifiedTokens;
   }
 
-  // Birdeye API - Best source for Solana tokens
+  // Birdeye API - Best source for Solana tokens (Standard plan - 500 req/min)
   async getBirdeyeTokens() {
     if (!this.birdeyeKey) return [];
     
     const allTokens = [];
     
-    // Fetch from multiple timeframes for maximum variety
+    // Fetch from multiple timeframes for maximum variety (increased limits for Standard plan)
     const endpoints = [
       // Super fresh - 30min volume (catching pumps early)
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mUSD&sort_type=desc&offset=0&limit=20', name: '30m vol' },
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mUSD&sort_type=desc&offset=0&limit=30', name: '30m vol' },
       // 1h volume - active tokens
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=20', name: '1h vol' },
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=30', name: '1h vol' },
       // 4h volume - medium term movers
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v4hUSD&sort_type=desc&offset=0&limit=15', name: '4h vol' },
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v4hUSD&sort_type=desc&offset=0&limit=25', name: '4h vol' },
       // 24h volume - established tokens
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=15', name: '24h vol' },
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=25', name: '24h vol' },
       // Recently traded - fresh activity
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=20', name: 'recent' },
-      // Price change movers
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=15', name: '1h gainers' }
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=30', name: 'recent' },
+      // Price change movers - gainers
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=20', name: '1h gainers' },
+      // Price change movers - losers (potential bounce plays)
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=asc&offset=0&limit=15', name: '1h losers' }
     ];
     
     for (const { url, name } of endpoints) {
