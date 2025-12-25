@@ -830,7 +830,7 @@ const styles = {
   // Grid
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, marginBottom: 24 },
   card: { background: '#12121a', borderRadius: 12, padding: 24, border: '1px solid #1a1a2e' },
-  cardTitle: { fontSize: 14, color: '#888', marginBottom: 20, textTransform: 'uppercase', letterSpacing: 1, margin: 0, marginBottom: 20 },
+  cardTitle: { fontSize: 14, color: '#888', textTransform: 'uppercase', letterSpacing: 1, margin: 0, marginBottom: 20 },
   
   // Confidence Ring
   ringContainer: { display: 'flex', justifyContent: 'center', position: 'relative', marginBottom: 20 },
@@ -854,7 +854,7 @@ const styles = {
   
   // Risk
   riskSection: { marginBottom: 24 },
-  sectionTitle: { fontSize: 16, marginBottom: 16, color: '#fff', margin: 0, marginBottom: 16 },
+  sectionTitle: { fontSize: 16, color: '#fff', margin: 0, marginBottom: 16 },
   riskBtns: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 },
   riskBtn: { padding: 16, border: '2px solid', borderRadius: 10, cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s', background: '#1a1a2e' },
   riskBtnLabel: { fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 4 },
@@ -905,7 +905,7 @@ const styles = {
   docsTitle: { fontSize: 32, fontWeight: 700, background: 'linear-gradient(90deg, #00ff88, #00ccff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, marginBottom: 12 },
   docsSubtitle: { color: '#888', fontSize: 14, margin: 0 },
   docSection: { marginBottom: 32, background: '#12121a', borderRadius: 12, padding: 24, border: '1px solid #1a1a2e' },
-  docSectionTitle: { fontSize: 18, fontWeight: 600, marginBottom: 16, color: '#00ccff', margin: 0, marginBottom: 16 },
+  docSectionTitle: { fontSize: 18, fontWeight: 600, color: '#00ccff', margin: 0, marginBottom: 16 },
   docSectionContent: { fontSize: 14, color: '#ccc', lineHeight: 1.7 },
   docsList: { margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 },
   docsTable: { width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: 13 },
