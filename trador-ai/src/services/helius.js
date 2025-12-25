@@ -117,39 +117,45 @@ class HeliusService {
   async getPumpFunTokens() {
     // Try Pump.fun API directly first (guaranteed real pump.fun tokens)
     try {
+      console.log('[TOKEN FETCH] Trying Pump.fun API...');
       const tokens = await this.getPumpFunCoins();
       if (tokens && tokens.length > 0) {
         this.dataSource = 'pumpfun';
         console.log(`[PUMP.FUN] Fetched ${tokens.length} REAL pump.fun tokens`);
         return tokens;
       }
+      console.log('[TOKEN FETCH] Pump.fun returned 0 tokens');
     } catch (e) {
-      console.error('Pump.fun API failed:', e.message);
+      console.error('[TOKEN FETCH] Pump.fun API failed:', e.message);
     }
 
     // Backup: DexScreener filtered to pump.fun only
     try {
+      console.log('[TOKEN FETCH] Trying DexScreener...');
       const tokens = await this.getDexScreenerPumpFunTokens();
       if (tokens && tokens.length > 0) {
         this.dataSource = 'dexscreener-pumpfun';
         console.log(`[DEXSCREENER] Fetched ${tokens.length} pump.fun tokens`);
         return tokens;
       }
+      console.log('[TOKEN FETCH] DexScreener returned 0 tokens');
     } catch (e) {
-      console.error('DexScreener pump.fun failed:', e.message);
+      console.error('[TOKEN FETCH] DexScreener pump.fun failed:', e.message);
     }
 
-    // Last resort: Birdeye but verify each token on pump.fun
+    // RELIABLE FALLBACK: Use Birdeye directly (was working before)
     if (this.birdeyeKey) {
       try {
-        const tokens = await this.getBirdeyeTokensVerified();
+        console.log('[TOKEN FETCH] Trying Birdeye direct...');
+        const tokens = await this.getBirdeyeTokens();
         if (tokens && tokens.length > 0) {
-          this.dataSource = 'birdeye-verified';
-          console.log(`[BIRDEYE] Fetched ${tokens.length} verified pump.fun tokens`);
+          this.dataSource = 'birdeye';
+          console.log(`[BIRDEYE] Fetched ${tokens.length} tokens from Birdeye`);
           return tokens;
         }
+        console.log('[TOKEN FETCH] Birdeye returned 0 tokens');
       } catch (e) {
-        console.error('Birdeye verified failed:', e.message);
+        console.error('[TOKEN FETCH] Birdeye direct failed:', e.message);
       }
     }
 
