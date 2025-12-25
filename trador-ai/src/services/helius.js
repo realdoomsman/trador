@@ -323,61 +323,84 @@ class HeliusService {
   async getBirdeyeTokens() {
     if (!this.birdeyeKey) return [];
     
-    const res = await fetch('https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=50', {
-      headers: {
-        'X-API-KEY': this.birdeyeKey,
-        'x-chain': 'solana'
-      }
-    });
+    const allTokens = [];
     
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Birdeye ${res.status}: ${text.slice(0, 100)}`);
+    // Fetch from multiple endpoints for variety
+    const endpoints = [
+      // 1h volume - catches newer active tokens
+      'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=30',
+      // Recently traded - fresh activity
+      'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=30',
+      // 24h volume for established tokens
+      'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=20'
+    ];
+    
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'X-API-KEY': this.birdeyeKey,
+            'x-chain': 'solana'
+          }
+        });
+        
+        if (!res.ok) continue;
+        
+        const data = await res.json();
+        if (!data.data?.tokens) continue;
+        
+        for (const t of data.data.tokens) {
+          // Skip if already added
+          if (allTokens.find(x => x.mint === t.address)) continue;
+          
+          allTokens.push({
+            mint: t.address,
+            symbol: t.symbol,
+            name: t.name,
+            // Price data
+            price: t.price || 0,
+            priceChange30m: t.v30mChangePercent || 0,
+            priceChange1h: t.v1hChangePercent || 0,
+            priceChange4h: t.v4hChangePercent || 0,
+            priceChange24h: t.v24hChangePercent || 0,
+            // Market data
+            usd_market_cap: t.mc || t.realMc || 0,
+            fdv: t.fdv || 0,
+            virtual_sol_reserves: t.liquidity || 0,
+            // Volume data
+            volume30m: t.v30mUSD || 0,
+            volume1h: t.v1hUSD || 0,
+            volume4h: t.v4hUSD || 0,
+            volume24h: t.v24hUSD || 0,
+            // Trading activity
+            txns24h: t.trade24h || 0,
+            buys24h: t.buy24h || 0,
+            sells24h: t.sell24h || 0,
+            buyVolume24h: t.vBuy24hUSD || 0,
+            sellVolume24h: t.vSell24hUSD || 0,
+            // Holder data
+            holder_count: t.holder || 0,
+            // Unique wallets
+            uniqueWallet24h: t.uniqueWallet24h || 0,
+            // Supply info
+            supply: t.supply || 0,
+            circulatingSupply: t.circulatingSupply || 0,
+            // Timestamps
+            created_timestamp: t.createdAt || new Date().toISOString(),
+            lastTradeTime: t.lastTradeUnixTime || 0,
+            // Calculated metrics
+            buyPressure: t.buy24h && t.sell24h ? (t.buy24h / (t.buy24h + t.sell24h)) * 100 : 50,
+            volumeToMcap: t.mc ? (t.v24hUSD || 0) / t.mc : 0,
+            source: 'birdeye'
+          });
+        }
+      } catch (e) {
+        console.error(`Birdeye endpoint failed: ${e.message}`);
+      }
     }
     
-    const data = await res.json();
-    if (!data.data?.tokens) return [];
-    
-    return data.data.tokens.map(t => ({
-      mint: t.address,
-      symbol: t.symbol,
-      name: t.name,
-      // Price data
-      price: t.price || 0,
-      priceChange30m: t.v30mChangePercent || 0,
-      priceChange1h: t.v1hChangePercent || 0,
-      priceChange4h: t.v4hChangePercent || 0,
-      priceChange24h: t.v24hChangePercent || 0,
-      // Market data
-      usd_market_cap: t.mc || t.realMc || 0,
-      fdv: t.fdv || 0,
-      virtual_sol_reserves: t.liquidity || 0,
-      // Volume data
-      volume30m: t.v30mUSD || 0,
-      volume1h: t.v1hUSD || 0,
-      volume4h: t.v4hUSD || 0,
-      volume24h: t.v24hUSD || 0,
-      // Trading activity
-      txns24h: t.trade24h || 0,
-      buys24h: t.buy24h || 0,
-      sells24h: t.sell24h || 0,
-      buyVolume24h: t.vBuy24hUSD || 0,
-      sellVolume24h: t.vSell24hUSD || 0,
-      // Holder data
-      holder_count: t.holder || 0,
-      // Unique wallets
-      uniqueWallet24h: t.uniqueWallet24h || 0,
-      // Supply info
-      supply: t.supply || 0,
-      circulatingSupply: t.circulatingSupply || 0,
-      // Timestamps
-      created_timestamp: t.createdAt || new Date().toISOString(),
-      lastTradeTime: t.lastTradeUnixTime || 0,
-      // Calculated metrics
-      buyPressure: t.buy24h && t.sell24h ? (t.buy24h / (t.buy24h + t.sell24h)) * 100 : 50,
-      volumeToMcap: t.mc ? (t.v24hUSD || 0) / t.mc : 0,
-      source: 'birdeye'
-    }));
+    console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens from multiple timeframes`);
+    return allTokens;
   }
 
   // DexScreener API
