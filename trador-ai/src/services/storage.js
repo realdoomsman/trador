@@ -196,6 +196,22 @@ class CloudStorage {
     }
     return null;
   }
+
+  // Save wallet intelligence data
+  async saveWalletIntel(data) {
+    const localPath = path.join(this.localCache, 'wallet_intel.json');
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, JSON.stringify(data, null, 2));
+  }
+
+  // Load wallet intelligence data
+  async loadWalletIntel() {
+    const localPath = path.join(this.localCache, 'wallet_intel.json');
+    if (fs.existsSync(localPath)) {
+      return JSON.parse(fs.readFileSync(localPath, 'utf8'));
+    }
+    return null;
+  }
 }
 
 export default new CloudStorage();

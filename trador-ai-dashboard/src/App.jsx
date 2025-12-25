@@ -231,6 +231,32 @@ function App() {
             {status?.isOptimalTime ? '✓ Optimal trading time' : '⚠ Suboptimal trading time'}
           </div>
         </div>
+
+        {/* Wallet Intelligence */}
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>Wallet Intelligence</h2>
+          <div style={styles.walletGrid}>
+            <div style={styles.walletItem}>
+              <div style={styles.walletValue}>{status?.knownWallets || 0}</div>
+              <div style={styles.walletLabel}>Known Wallets</div>
+            </div>
+            <div style={styles.walletItem}>
+              <div style={styles.walletValue}>{status?.trackedClusters || 0}</div>
+              <div style={styles.walletLabel}>Clusters</div>
+            </div>
+            <div style={styles.walletItem}>
+              <div style={{ ...styles.walletValue, color: '#ff4444' }}>{status?.ruggerWallets || 0}</div>
+              <div style={styles.walletLabel}>Ruggers</div>
+            </div>
+            <div style={styles.walletItem}>
+              <div style={{ ...styles.walletValue, color: '#00ff88' }}>{status?.profitableWalletsTracked || 0}</div>
+              <div style={styles.walletLabel}>Profitable</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 10, color: '#666', textAlign: 'center' }}>
+            Tracking dev wallets, snipers, whales, insiders
+          </div>
+        </div>
       </div>
 
       {/* Virtual Trading Stats */}
@@ -410,7 +436,12 @@ const styles = {
   alphaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   alphaItem: { textAlign: 'center', padding: 12, background: '#1a1a2e', borderRadius: 8 },
   alphaValue: { fontSize: 20, fontWeight: 700, color: '#00ccff' },
-  alphaLabel: { fontSize: 11, color: '#666', marginTop: 4 }
+  alphaLabel: { fontSize: 11, color: '#666', marginTop: 4 },
+  // Wallet intelligence styles
+  walletGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  walletItem: { textAlign: 'center', padding: 10, background: '#1a1a2e', borderRadius: 6 },
+  walletValue: { fontSize: 18, fontWeight: 700, color: '#00ccff' },
+  walletLabel: { fontSize: 10, color: '#666', marginTop: 2 }
 };
 
 export default App;

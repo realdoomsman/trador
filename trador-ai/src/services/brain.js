@@ -5,6 +5,7 @@ import helius from './helius.js';
 import analytics from './analytics.js';
 import learner from './learner.js';
 import alpha from './alpha.js';
+import walletIntel from './walletIntel.js';
 
 class TradingBrain {
   constructor() {
@@ -52,6 +53,11 @@ class TradingBrain {
     
     // Initialize self-learner
     await learner.initialize();
+    
+    // Initialize wallet intelligence
+    await walletIntel.initialize();
+    const walletStats = walletIntel.getStats();
+    console.log(`Wallet Intel: ${walletStats.totalKnownWallets} wallets, ${walletStats.clusters} clusters`);
     
     // Load alpha engine state
     const alphaState = await storage.loadAlphaState();
@@ -243,6 +249,22 @@ class TradingBrain {
     const profitTargets = alpha.calculateProfitTargets(advancedAnalysis, alpha.marketRegime);
     const isOptimalTime = alpha.isOptimalTradingTime();
     
+    // WALLET INTELLIGENCE - Analyze top holders
+    let walletAnalysis = null;
+    try {
+      if (deepAnalysis?.holders?.topHolderAddresses) {
+        const topHolders = deepAnalysis.holders.topHolderAddresses.map((addr, i) => ({
+          address: addr,
+          percentage: i === 0 ? deepAnalysis.holders.top1Percent : 
+                     i < 5 ? deepAnalysis.holders.top5Percent / 5 : 
+                     deepAnalysis.holders.top10Percent / 10
+        }));
+        walletAnalysis = await walletIntel.analyzeTokenHolders(tokenData.mint, topHolders);
+      }
+    } catch (err) {
+      // Continue without wallet analysis
+    }
+    
     // Combine analyses
     const combinedAnalysis = {
       ...geminiAnalysis,
@@ -258,8 +280,34 @@ class TradingBrain {
       exitStrategy,
       profitTargets,
       isOptimalTime: isOptimalTime.isOptimal,
-      marketRegime: alpha.marketRegime
+      marketRegime: alpha.marketRegime,
+      // Wallet intelligence
+      walletAnalysis,
+      walletRisk: walletAnalysis?.overallRisk || 50,
+      hasDevRisk: walletAnalysis?.devWallets?.length > 0,
+      hasSniperRisk: walletAnalysis?.sniperWallets?.length > 0,
+      hasClusterRisk: walletAnalysis?.clusters?.hasCoordinatedHolding || false,
+      smartWalletsHolding: walletAnalysis?.profitableWallets?.length || 0,
+      walletSignals: walletAnalysis?.signals || []
     };
+    
+    // Adjust score based on wallet analysis
+    if (walletAnalysis) {
+      // Penalize for risky wallets
+      if (walletAnalysis.overallRisk > 70) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 15);
+        combinedAnalysis.flags.push('HIGH_WALLET_RISK');
+      }
+      // Boost for smart money
+      if (walletAnalysis.profitableWallets.length > 2) {
+        combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 10);
+      }
+      // Penalize for coordinated holding
+      if (walletAnalysis.clusters?.hasCoordinatedHolding) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
+        combinedAnalysis.flags.push('COORDINATED_HOLDING');
+      }
+    }
     
     // Collect data point for learning
     await this.collectDataPoint(tokenData, null, null);
@@ -277,6 +325,10 @@ class TradingBrain {
   shouldTradeAdvanced(analysis) {
     if (!analysis) return false;
     
+    // WALLET RISK CHECK - Don't trade if wallet risk is too high
+    if (analysis.walletRisk > 80) return false;
+    if (analysis.hasClusterRisk) return false;
+    
     // Use advanced score
     const score = analysis.advancedScore || analysis.confidence || 0;
     const rec = analysis.advancedRecommendation || analysis.recommendation;
@@ -291,7 +343,10 @@ class TradingBrain {
                      this.state.riskProfile === 'medium' ? 60 : 50;
     
     // Boost threshold if smart wallet is buying
-    const adjustedMin = analysis.smartWalletBuying ? minScore - 5 : minScore;
+    let adjustedMin = analysis.smartWalletBuying ? minScore - 5 : minScore;
+    
+    // Further boost if profitable wallets are holding
+    if (analysis.smartWalletsHolding > 2) adjustedMin -= 5;
     
     return score >= adjustedMin && (rec === 'BUY' || rec === 'STRONG_BUY');
   }
@@ -504,6 +559,7 @@ class TradingBrain {
       Array.from(this.activeVirtualPositions.values()), 
       10000 // Assume $10k virtual capital
     );
+    const walletStats = walletIntel.getStats();
 
     return {
       confidence: this.state.confidence,
@@ -530,6 +586,12 @@ class TradingBrain {
       smartMoneyTracked: alphaStatus.smartMoneyCount,
       isOptimalTime: alphaStatus.isOptimalTime,
       bestTradingTimes: alphaStatus.optimalTimes,
+      // Wallet intelligence stats
+      walletIntel: walletStats,
+      knownWallets: walletStats.totalKnownWallets,
+      trackedClusters: walletStats.clusters,
+      ruggerWallets: walletStats.ruggerWallets,
+      profitableWalletsTracked: walletStats.profitableWallets,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns

@@ -90,6 +90,17 @@ app.get('/api/alpha', (req, res) => {
   });
 });
 
+app.get('/api/wallet-intel', (req, res) => {
+  const status = brain.getStatus();
+  res.json({
+    walletIntel: status.walletIntel,
+    knownWallets: status.knownWallets,
+    trackedClusters: status.trackedClusters,
+    ruggerWallets: status.ruggerWallets,
+    profitableWalletsTracked: status.profitableWalletsTracked
+  });
+});
+
 // Main scan loop with rate limiting
 async function scanLoop() {
   try {
