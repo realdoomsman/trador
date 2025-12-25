@@ -7,6 +7,12 @@ class HeliusService {
     this.baseUrl = `https://api.helius.xyz/v0`;
     this.birdeyeKey = config.birdeyeApiKey;
     this.dataSource = 'none'; // Track which source is working
+    
+    // Debug: Log API keys on init
+    console.log('Helius Service Init:', {
+      helius: this.apiKey ? `${this.apiKey.slice(0, 10)}...` : 'NOT SET',
+      birdeye: this.birdeyeKey ? `${this.birdeyeKey.slice(0, 10)}...` : 'NOT SET'
+    });
   }
 
   async fetch(endpoint, options = {}) {

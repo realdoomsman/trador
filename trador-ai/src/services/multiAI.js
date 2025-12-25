@@ -19,6 +19,15 @@ class MultiAIEngine {
   }
 
   async initialize() {
+    // Debug: Log which keys are present
+    console.log('Multi-AI Key Check:', {
+      gemini: this.geminiKey ? `${this.geminiKey.slice(0, 10)}...` : 'NOT SET',
+      openai: this.openaiKey ? `${this.openaiKey.slice(0, 10)}...` : 'NOT SET',
+      claude: this.claudeKey ? `${this.claudeKey.slice(0, 10)}...` : 'NOT SET',
+      groq: this.groqKey ? `${this.groqKey.slice(0, 10)}...` : 'NOT SET',
+      perplexity: this.perplexityKey ? `${this.perplexityKey.slice(0, 10)}...` : 'NOT SET'
+    });
+    
     // Check which AIs are available
     if (this.geminiKey) this.availableAIs.push('gemini');
     if (this.openaiKey) this.availableAIs.push('openai');
