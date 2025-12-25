@@ -300,7 +300,15 @@ class TradingBrain {
       // Continue without wallet analysis
     }
     
-    // Combine analyses
+    // Combine analyses - ensure flags is always an array
+    // advancedAnalysis.flags is an object { red: [], yellow: [], green: [] }
+    const flagsObj = advancedAnalysis.flags || { red: [], yellow: [], green: [] };
+    const allFlags = [
+      ...(flagsObj.red || []).map(f => `RED:${f}`),
+      ...(flagsObj.yellow || []).map(f => `YELLOW:${f}`),
+      ...(flagsObj.green || []).map(f => `GREEN:${f}`)
+    ];
+    
     const combinedAnalysis = {
       ...geminiAnalysis,
       advancedScore: advancedAnalysis.score,
@@ -308,7 +316,8 @@ class TradingBrain {
       multiTimeframe: advancedAnalysis.multiTimeframe,
       smartWalletBuying: advancedAnalysis.smartWalletBuying,
       dynamicExits: advancedAnalysis.exits,
-      flags: advancedAnalysis.flags,
+      flags: allFlags,
+      flagsObj: flagsObj,
       finalConfidence: advancedAnalysis.confidence,
       // Alpha engine additions
       momentumScore,

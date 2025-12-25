@@ -10,7 +10,8 @@ class GeminiAnalyzer {
     
     if (config.geminiApiKey) {
       this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      // Use gemini-1.5-flash-latest or gemini-pro as fallback
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
     }
   }
 

@@ -38,7 +38,7 @@ class MultiAIEngine {
       const prompt = this.buildAnalysisPrompt(tokenData, context);
       
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${this.geminiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
