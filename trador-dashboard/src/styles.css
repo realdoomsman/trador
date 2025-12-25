@@ -195,3 +195,9 @@ h4 { color: #333; margin-bottom: 4px; font-size: 11px; }
 .fi-flag.yellow { background: #ffffd4; border-color: var(--yellow); color: #666600; }
 .feed-empty { text-align: center; padding: 40px; color: #666; }
 .main-btn.hot { background: linear-gradient(135deg, var(--green), #00aa00); color: #fff; }
+.fi-contract { display: flex; gap: 8px; margin: 4px 0; }
+.fi-mint { font-family: monospace; font-size: 10px; color: var(--blue); text-decoration: none; background: #f0f0f0; padding: 2px 6px; border: 1px solid var(--win-dark); }
+.fi-mint:hover { background: #e0e0e0; }
+.fi-pump, .fi-bird { font-size: 9px; color: var(--blue); text-decoration: none; padding: 2px 6px; border: 1px solid var(--win-dark); background: #fff; }
+.fi-pump:hover, .fi-bird:hover { background: #e8e8ff; }
+.fi-liq { color: #666; }
