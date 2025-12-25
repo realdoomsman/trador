@@ -429,11 +429,14 @@ function App() {
                     {t.shouldTrade && <span className="fi-trade">TRADE</span>}
                   </div>
                   <div className="fi-contract">
-                    <a href={`https://solscan.io/token/${t.mint}`} target="_blank" rel="noopener noreferrer" className="fi-mint">
-                      {t.mint?.slice(0, 6)}...{t.mint?.slice(-4)}
-                    </a>
-                    <a href={`https://pump.fun/${t.mint}`} target="_blank" rel="noopener noreferrer" className="fi-pump">pump.fun</a>
-                    <a href={`https://birdeye.so/token/${t.mint}?chain=solana`} target="_blank" rel="noopener noreferrer" className="fi-bird">birdeye</a>
+                    <button className="fi-copy" onClick={() => {navigator.clipboard.writeText(t.mint); alert('CA copied!')}}>Copy CA</button>
+                    <a href={`https://solscan.io/token/${t.mint}`} target="_blank" rel="noopener noreferrer" className="fi-link">Solscan</a>
+                    <a href={`https://pump.fun/coin/${t.mint}`} target="_blank" rel="noopener noreferrer" className="fi-link">Pump.fun</a>
+                    <a href={`https://birdeye.so/token/${t.mint}?chain=solana`} target="_blank" rel="noopener noreferrer" className="fi-link">Birdeye</a>
+                    <a href={`https://dexscreener.com/solana/${t.mint}`} target="_blank" rel="noopener noreferrer" className="fi-link">DexScreener</a>
+                  </div>
+                  <div className="fi-ca">
+                    <span className="fi-mint">{t.mint}</span>
                   </div>
                   <div className="fi-details">
                     <span className="fi-ai">AI: {t.aiVotes?.buy || 0}B/{t.aiVotes?.sell || 0}S/{t.aiVotes?.hold || 0}H</span>

@@ -201,3 +201,9 @@ h4 { color: #333; margin-bottom: 4px; font-size: 11px; }
 .fi-pump, .fi-bird { font-size: 9px; color: var(--blue); text-decoration: none; padding: 2px 6px; border: 1px solid var(--win-dark); background: #fff; }
 .fi-pump:hover, .fi-bird:hover { background: #e8e8ff; }
 .fi-liq { color: #666; }
+.fi-copy { background: var(--blue); color: #fff; border: 1px solid var(--win-dark); padding: 2px 8px; font-size: 10px; cursor: pointer; }
+.fi-copy:hover { background: #1084d0; }
+.fi-link { font-size: 10px; color: var(--blue); text-decoration: none; padding: 2px 8px; border: 1px solid var(--win-dark); background: #fff; }
+.fi-link:hover { background: #e8e8ff; text-decoration: underline; }
+.fi-ca { margin: 4px 0; }
+.fi-ca .fi-mint { font-family: monospace; font-size: 9px; color: #666; word-break: break-all; background: #f5f5f5; padding: 2px 4px; display: block; border: 1px solid #ddd; }
