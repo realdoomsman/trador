@@ -110,6 +110,15 @@ app.get('/api/multi-ai', (req, res) => {
   });
 });
 
+app.get('/api/social', (req, res) => {
+  const status = brain.getStatus();
+  res.json({
+    socialIntel: status.socialIntel,
+    hotNarratives: status.hotNarratives,
+    viralTokens: status.viralTokens
+  });
+});
+
 // Main scan loop with rate limiting
 async function scanLoop() {
   try {

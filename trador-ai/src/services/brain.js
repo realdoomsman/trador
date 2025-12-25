@@ -8,6 +8,7 @@ import alpha from './alpha.js';
 import walletIntel from './walletIntel.js';
 import multiAI from './multiAI.js';
 import externalTools from './externalTools.js';
+import socialIntel from './socialIntel.js';
 
 class TradingBrain {
   constructor() {
@@ -269,6 +270,14 @@ class TradingBrain {
       // Continue without security check
     }
     
+    // SOCIAL INTELLIGENCE - Narrative, viral, hype analysis
+    let socialAnalysis = null;
+    try {
+      socialAnalysis = await socialIntel.analyzeSocialSignals(enrichedData);
+    } catch (err) {
+      // Continue without social analysis
+    }
+    
     // Get alpha engine insights
     const momentumScore = alpha.calculateMomentumScore(enrichedData);
     const exitStrategy = alpha.selectExitStrategy(enrichedData, advancedAnalysis, alpha.marketRegime);
@@ -324,7 +333,17 @@ class TradingBrain {
       securityCheck: securityCheck,
       securityRisk: securityCheck?.riskScore || 50,
       securityFlags: securityCheck?.flags || [],
-      isSecure: securityCheck?.isSafe || false
+      isSecure: securityCheck?.isSafe || false,
+      // Social intelligence
+      socialAnalysis: socialAnalysis,
+      socialScore: socialAnalysis?.socialScore || 50,
+      narrative: socialAnalysis?.narrative?.primaryNarrative || 'UNKNOWN',
+      isHotNarrative: socialAnalysis?.narrative?.isHotNarrative || false,
+      isViral: socialAnalysis?.viral?.isViral || false,
+      viralPotential: socialAnalysis?.viral?.viralPotential || 50,
+      isHyped: socialAnalysis?.hype?.isHyped || false,
+      socialSignals: socialAnalysis?.signals || [],
+      socialRisks: socialAnalysis?.risks || []
     };
     
     // Adjust score based on wallet analysis
@@ -342,6 +361,30 @@ class TradingBrain {
       if (walletAnalysis.clusters?.hasCoordinatedHolding) {
         combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 20);
         combinedAnalysis.flags.push('COORDINATED_HOLDING');
+      }
+    }
+    
+    // Adjust score based on social analysis
+    if (socialAnalysis) {
+      // Boost for hot narrative
+      if (socialAnalysis.narrative?.isHotNarrative) {
+        combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 10);
+        combinedAnalysis.flags.push('HOT_NARRATIVE');
+      }
+      // Boost for viral
+      if (socialAnalysis.viral?.isViral) {
+        combinedAnalysis.advancedScore = Math.min(100, combinedAnalysis.advancedScore + 15);
+        combinedAnalysis.flags.push('VIRAL');
+      }
+      // Penalize for fading hype
+      if (socialAnalysis.viral?.isFading) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 10);
+        combinedAnalysis.flags.push('HYPE_FADING');
+      }
+      // Penalize for pump & dump
+      if (socialAnalysis.hype?.isPumpAndDump) {
+        combinedAnalysis.advancedScore = Math.max(0, combinedAnalysis.advancedScore - 25);
+        combinedAnalysis.flags.push('PUMP_AND_DUMP');
       }
     }
     
@@ -661,6 +704,10 @@ class TradingBrain {
       multiAI: multiAI.getStatus(),
       availableAIs: multiAI.getStatus().availableAIs,
       aiModelsCount: multiAI.getStatus().aiCount,
+      // Social intelligence stats
+      socialIntel: socialIntel.getStatus(),
+      hotNarratives: socialIntel.getStatus().hotNarratives,
+      viralTokens: socialIntel.getStatus().viralTokensCount,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns

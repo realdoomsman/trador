@@ -282,6 +282,31 @@ function App() {
             Supports: Gemini, OpenAI, Claude, Groq, Perplexity
           </div>
         </div>
+
+        {/* Social Intelligence */}
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>Social Intelligence</h2>
+          <div style={styles.socialGrid}>
+            <div style={styles.socialItem}>
+              <div style={{ ...styles.socialValue, color: '#ff00ff' }}>
+                {status?.viralTokens || 0}
+              </div>
+              <div style={styles.socialLabel}>Viral Tokens</div>
+            </div>
+            <div style={styles.socialItem}>
+              <div style={styles.socialValue}>
+                {status?.hotNarratives?.slice(0, 2).join(', ') || 'None'}
+              </div>
+              <div style={styles.socialLabel}>Hot Narratives</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 10, color: '#666', textAlign: 'center' }}>
+            Tracking: AI, Animal, Meme, Political, Celebrity
+          </div>
+          <div style={{ marginTop: 6, fontSize: 9, color: '#555', textAlign: 'center' }}>
+            Viral detection, hype analysis, pump & dump alerts
+          </div>
+        </div>
       </div>
 
       {/* Virtual Trading Stats */}
@@ -471,7 +496,12 @@ const styles = {
   aiGrid: { display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 },
   aiItem: { textAlign: 'center', padding: 10, background: '#1a1a2e', borderRadius: 6 },
   aiValue: { fontSize: 14, fontWeight: 700, color: '#00ccff' },
-  aiLabel: { fontSize: 10, color: '#666', marginTop: 2 }
+  aiLabel: { fontSize: 10, color: '#666', marginTop: 2 },
+  // Social intelligence styles
+  socialGrid: { display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 },
+  socialItem: { textAlign: 'center', padding: 10, background: '#1a1a2e', borderRadius: 6 },
+  socialValue: { fontSize: 14, fontWeight: 700, color: '#ff00ff' },
+  socialLabel: { fontSize: 10, color: '#666', marginTop: 2 }
 };
 
 export default App;
