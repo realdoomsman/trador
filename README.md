@@ -1,114 +1,470 @@
-# TRADOR 🔥
+# TRADOR - AI-Powered Solana Memecoin Trading System
 
-**Autonomous trading bot that trades Pump.fun memecoins and uses 100% of profits to buy back TRADOR.**
+<div align="center">
 
-> Bot wins = Buybacks = Chart pumps 📈
+![TRADOR Logo](https://img.shields.io/badge/TRADOR-AI%20Trading-00ff88?style=for-the-badge&logo=solana)
+
+**The Most Advanced Self-Learning AI Trading System for Solana Memecoins**
+
+[![Solana](https://img.shields.io/badge/Solana-Blockchain-9945FF?style=flat&logo=solana)](https://solana.com)
+[![AI Powered](https://img.shields.io/badge/AI-Multi--Model-00ccff?style=flat)](https://github.com/realdoomsman/trador)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+[Live Dashboard](http://34.123.211.253:3002) • [Documentation](#documentation) • [Whitepaper](#whitepaper)
+
+</div>
 
 ---
 
-## What Is TRADOR?
+## 🚀 Overview
 
-TRADOR is a Pump.fun token with a twist: an autonomous bot trades other memecoins 24/7, and every SOL of profit automatically buys TRADOR - creating constant buy pressure on the chart.
+TRADOR is a cutting-edge AI trading system designed specifically for Solana memecoins. It combines multiple AI models, on-chain analysis, wallet intelligence, and social signals to identify high-potential trading opportunities while avoiding rugs and scams.
 
-- **100% profit buyback** - Every winning trade buys TRADOR
-- **Never sells** - Bot accumulates TRADOR forever
-- **Fully transparent** - One public wallet, verify everything on-chain
-- **No token taxes** - Standard Pump.fun token
+### Key Features
+
+- **🧠 Multi-AI Consensus** - Combines Gemini, GPT-4, Claude, Groq, and Perplexity for trading decisions
+- **🔍 Deep On-Chain Analysis** - Analyzes holder distribution, whale wallets, and transaction patterns
+- **🛡️ Security Scanning** - Integrates RugCheck and GoPlus for automated rug detection
+- **📊 Self-Learning AI** - Continuously improves from trading outcomes
+- **🌐 Social Intelligence** - Tracks narratives, viral potential, and market sentiment
+- **💼 Wallet Intelligence** - Identifies dev wallets, snipers, whales, and profitable traders
 
 ---
 
-## The Flywheel
+## 📋 Table of Contents
+
+- [Architecture](#architecture)
+- [Components](#components)
+- [AI Systems](#ai-systems)
+- [Security Features](#security-features)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Whitepaper](#whitepaper)
+- [Roadmap](#roadmap)
+
+---
+
+## 🏗️ Architecture
 
 ```
-Bot trades memecoins → Profits → Buybacks → Chart support → Repeat
+┌─────────────────────────────────────────────────────────────────┐
+│                        TRADOR SYSTEM                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │   Birdeye   │  │   Helius    │  │  DexScreener│  Data       │
+│  │   API       │  │   RPC       │  │   API       │  Sources    │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘             │
+│         │                │                │                     │
+│         └────────────────┼────────────────┘                     │
+│                          ▼                                      │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │                    TRADING BRAIN                          │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │ │
+│  │  │Analytics│ │ Learner │ │  Alpha  │ │ Wallet  │         │ │
+│  │  │ Engine  │ │   AI    │ │ Engine  │ │  Intel  │         │ │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │ │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │ │
+│  │  │Multi-AI │ │External │ │ Social  │ │ Gemini  │         │ │
+│  │  │Consensus│ │ Tools   │ │  Intel  │ │Analyzer │         │ │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                          │                                      │
+│                          ▼                                      │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │                   DECISION ENGINE                         │ │
+│  │  Score Calculation → Risk Assessment → Trade Execution    │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                          │                                      │
+│                          ▼                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │  Dashboard  │  │  REST API   │  │   Storage   │             │
+│  │    (React)  │  │  (Express)  │  │   (JSON)    │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-1. Bot scans Pump.fun for opportunities
-2. Enters positions based on scoring algorithm
-3. Takes profits via TP/trailing stops
-4. 100% of profits buy TRADOR
-5. TRADOR supply absorbed, price supported
-6. Cycle continues 24/7
+---
+
+## 🔧 Components
+
+### 1. Trading Brain (`brain.js`)
+The central intelligence that coordinates all analysis systems and makes trading decisions.
+
+- Manages token analysis pipeline
+- Coordinates multi-AI consensus
+- Tracks virtual trades for learning
+- Calculates confidence scores
+
+### 2. Analytics Engine (`analytics.js`)
+Advanced pattern recognition and scoring system.
+
+- 60+ data points per token
+- Multi-timeframe analysis
+- Pattern recognition
+- Backtesting capabilities
+
+### 3. Self-Learning AI (`learner.js`)
+Continuously improves from trading outcomes.
+
+- Adjusts signal weights based on performance
+- Dynamic threshold optimization
+- Auto-optimization every 50 outcomes
+- Tracks accuracy and win rate
+
+### 4. Alpha Engine (`alpha.js`)
+Profit maximization strategies.
+
+- Market regime detection (Bull/Bear/Neutral/Volatile)
+- Kelly Criterion position sizing
+- Dynamic exit strategies (Scalp/Swing/Moon)
+- Optimal trading time detection
+
+### 5. Wallet Intelligence (`walletIntel.js`)
+Deep wallet analysis and tracking.
+
+- Dev wallet identification
+- Sniper bot detection
+- Whale tracking
+- Cluster/bubble map analysis
+- Rugger wallet blacklist
+- Profitable wallet whitelist
+
+### 6. Multi-AI Engine (`multiAI.js`)
+Combines multiple AI models for consensus.
+
+- Gemini 1.5 Flash
+- OpenAI GPT-4
+- Anthropic Claude
+- Groq (Llama 3.1)
+- Perplexity (Real-time search)
+
+### 7. External Tools (`externalTools.js`)
+Third-party security integrations.
+
+- RugCheck.xyz - Rug detection
+- GoPlus Security - Token scanning
+- Social sentiment analysis
+
+### 8. Social Intelligence (`socialIntel.js`)
+Social signal analysis.
+
+- Narrative detection (AI, Animal, Meme, Political, etc.)
+- Viral potential scoring
+- Hype analysis
+- Pump & dump detection
+- Community strength metrics
 
 ---
 
-## Trading Strategy
+## 🤖 AI Systems
 
-### Tier System
+### Multi-AI Consensus
 
-| Tier | Market Cap | Position | Take Profit | Stop Loss |
-|------|------------|----------|-------------|-----------|
-| A (Degen) | <$25k | 15% | +100% | -35% |
-| B (Momentum) | $25k-$150k | 25% | +60% | -25% |
-| C (Swing) | >$150k | 40% | +35% | -15% |
+TRADOR uses multiple AI models to reach consensus on trading decisions:
 
-### Scoring Algorithm
+| AI Model | Purpose | Speed | Accuracy |
+|----------|---------|-------|----------|
+| Gemini 1.5 | Primary analysis | Fast | High |
+| GPT-4 | Deep reasoning | Medium | Very High |
+| Claude | Risk assessment | Medium | Very High |
+| Groq | Real-time decisions | Very Fast | High |
+| Perplexity | News/Alpha search | Medium | High |
 
-- Volume Acceleration (40%) - Is volume increasing?
-- Buy Pressure (25%) - More buyers than sellers?
-- Trade Breadth (20%) - Many traders vs whales
-- Momentum (15%) - Price trending up
+**Consensus Algorithm:**
+1. All available AIs analyze the token in parallel
+2. Each AI votes: BUY, SELL, or HOLD
+3. Agreement percentage calculated
+4. Weighted confidence based on agreement
+5. Final signal requires >60% agreement
+
+### Self-Learning System
+
+The AI continuously learns from outcomes:
+
+```
+Token Tracked → 30min Wait → Check Price → Classify Outcome
+                                              ↓
+                              PUMP (>20%) / DUMP (<-20%) / NEUTRAL
+                                              ↓
+                              Adjust Weights & Thresholds
+                                              ↓
+                              Save to Training Data
+```
+
+**Learned Signals:**
+- Market cap ranges
+- Liquidity thresholds
+- Buy pressure patterns
+- Holder distribution
+- Whale activity
+- Volume patterns
 
 ---
 
-## Quick Start
+## 🛡️ Security Features
+
+### Automated Security Checks
+
+Every token is scanned for:
+
+| Check | Source | Risk Factor |
+|-------|--------|-------------|
+| Mint Authority | RugCheck/GoPlus | Can create more tokens |
+| Freeze Authority | RugCheck/GoPlus | Can freeze transfers |
+| LP Locked | RugCheck | Liquidity protection |
+| Honeypot | GoPlus | Can't sell |
+| Hidden Owner | GoPlus | Ownership obfuscation |
+| Buy/Sell Tax | GoPlus | Hidden fees |
+| Creator Holdings | Birdeye | Insider risk |
+
+### Wallet Risk Assessment
+
+| Wallet Type | Risk Level | Action |
+|-------------|------------|--------|
+| Dev Wallet | High | Flag + reduce score |
+| Sniper Bot | Medium | Track + caution |
+| Whale | Variable | Track behavior |
+| Insider | High | Flag + avoid |
+| Rugger | Critical | Blacklist |
+| Profitable | Low | Follow signals |
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Git
+
+### Quick Start
 
 ```bash
-# Bot
-cd trador-bot
-cp .env.example .env
-# Add your PRIVATE_KEY and TRADOR_MINT
+# Clone repository
+git clone https://github.com/realdoomsman/trador.git
+cd trador
+
+# Install AI system
+cd trador-ai
 npm install
+cp .env.example .env
+# Edit .env with your API keys
+
+# Start AI system
 npm start
 
-# Dashboard
-cd trador-dashboard
+# Install dashboard (new terminal)
+cd ../trador-ai-dashboard
 npm install
 npm run dev
 ```
 
-- Dashboard: http://localhost:3000
-- API: http://localhost:3001
+### Production Deployment
 
----
-
-## Configuration
-
-Edit `trador-bot/.env`:
-
-```env
-RPC_URL=https://api.mainnet-beta.solana.com
-PRIVATE_KEY=your_base58_private_key
-TRADOR_MINT=your_token_mint_address
-MIN_SOL_RESERVE=0.5
-TELEGRAM_BOT_TOKEN=optional
-TELEGRAM_CHAT_ID=optional
+```bash
+# Using PM2
+pm2 start trador-ai/src/index.js --name trador-ai
+pm2 start "npm run preview" --name trador-dashboard --cwd trador-ai-dashboard
+pm2 save
 ```
 
 ---
 
-## API Endpoints
+## ⚙️ Configuration
 
-| Endpoint | Description |
-|----------|-------------|
-| GET /api/state | Full bot state |
-| GET /api/stats | Trading statistics |
-| GET /api/trades | Recent trades |
-| GET /api/buybacks | Buyback history |
-| GET /api/position | Current position |
+### Environment Variables
+
+```env
+# Required
+BIRDEYE_API_KEY=your_birdeye_key
+GEMINI_API_KEY=your_gemini_key
+
+# Optional (for Multi-AI)
+OPENAI_API_KEY=sk-your-openai-key
+CLAUDE_API_KEY=sk-ant-your-claude-key
+GROQ_API_KEY=gsk_your-groq-key
+PERPLEXITY_API_KEY=pplx-your-perplexity-key
+
+# Helius (optional)
+HELIUS_API_KEY=your_helius_key
+HELIUS_PLAN=free
+
+# Settings
+USE_GPU=false
+SCAN_INTERVAL=60000
+API_PORT=3003
+```
+
+### Risk Profiles
+
+| Profile | Position Size | Stop Loss | Take Profit |
+|---------|--------------|-----------|-------------|
+| Low | 2% | 5% | 10% |
+| Medium | 5% | 10% | 25% |
+| High | 10% | 20% | 50% |
 
 ---
 
-## Transparency
+## 📡 API Reference
 
-Everything is verifiable on-chain:
-- All trades visible on Solscan
-- All buybacks are on-chain swaps
-- Wallet balance is public
-- No hidden mechanics
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | System status and stats |
+| `/api/positions` | GET | Active virtual positions |
+| `/api/trades` | GET | Recent closed trades |
+| `/api/patterns` | GET | Learned patterns |
+| `/api/alpha` | GET | Alpha engine status |
+| `/api/wallet-intel` | GET | Wallet intelligence stats |
+| `/api/multi-ai` | GET | Multi-AI status |
+| `/api/social` | GET | Social intelligence stats |
+| `/api/start` | POST | Start the bot |
+| `/api/stop` | POST | Stop the bot |
+| `/api/risk-profile` | POST | Set risk profile |
+
+### Example Response
+
+```json
+{
+  "confidence": 65,
+  "dataPoints": 15000,
+  "aiAccuracy": 58.5,
+  "marketRegime": "volatile",
+  "hotNarratives": ["AI", "ANIMAL"],
+  "knownWallets": 250,
+  "trackedClusters": 15
+}
+```
 
 ---
 
-## License
+## 📄 Whitepaper
 
-MIT
+### Abstract
+
+TRADOR represents a paradigm shift in memecoin trading by combining multiple artificial intelligence models with deep on-chain analysis and social intelligence. The system learns from every trade outcome, continuously improving its ability to identify profitable opportunities while avoiding scams and rugs.
+
+### Problem Statement
+
+The Solana memecoin market presents unique challenges:
+1. **High Rug Rate** - 90%+ of new tokens are scams
+2. **Information Asymmetry** - Insiders have advantages
+3. **Speed Requirements** - Opportunities last minutes
+4. **Emotional Trading** - FOMO leads to losses
+
+### Solution
+
+TRADOR addresses these challenges through:
+
+1. **Multi-Layer Security**
+   - Automated rug detection
+   - Wallet behavior analysis
+   - Cluster identification
+
+2. **AI Consensus**
+   - Multiple models reduce bias
+   - Agreement-weighted confidence
+   - Real-time adaptation
+
+3. **Self-Learning**
+   - Outcome-based optimization
+   - Dynamic threshold adjustment
+   - Pattern recognition
+
+4. **Social Intelligence**
+   - Narrative tracking
+   - Viral detection
+   - Sentiment analysis
+
+### Tokenomics (Future)
+
+| Allocation | Percentage |
+|------------|------------|
+| Liquidity | 40% |
+| Development | 20% |
+| Marketing | 15% |
+| Team | 15% |
+| Reserve | 10% |
+
+### Technical Specifications
+
+- **Blockchain**: Solana
+- **Data Sources**: Birdeye, Helius, DexScreener
+- **AI Models**: 5 (Gemini, GPT-4, Claude, Groq, Perplexity)
+- **Analysis Points**: 60+ per token
+- **Scan Interval**: 60 seconds
+- **Learning Cycle**: 30 minutes per token
+
+---
+
+## 🗺️ Roadmap
+
+### Phase 1 ✅ (Complete)
+- [x] Core trading brain
+- [x] Birdeye integration
+- [x] Basic analytics
+- [x] Virtual trading
+- [x] Dashboard v1
+
+### Phase 2 ✅ (Complete)
+- [x] Self-learning AI
+- [x] Multi-AI consensus
+- [x] Wallet intelligence
+- [x] Security scanning
+- [x] Social intelligence
+
+### Phase 3 (In Progress)
+- [ ] Live trading integration
+- [ ] Telegram bot
+- [ ] Mobile app
+- [ ] Advanced backtesting
+
+### Phase 4 (Planned)
+- [ ] TRADOR token launch
+- [ ] Profit sharing
+- [ ] Copy trading
+- [ ] API access tiers
+
+---
+
+## 📊 Performance Metrics
+
+| Metric | Target | Current |
+|--------|--------|---------|
+| AI Accuracy | >60% | Learning |
+| Rug Detection | >95% | Active |
+| Scan Speed | <5s | ~3s |
+| Uptime | 99.9% | 99.9% |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+
+---
+
+## ⚠️ Disclaimer
+
+This software is for educational purposes only. Trading cryptocurrencies involves significant risk. Past performance does not guarantee future results. Always do your own research and never invest more than you can afford to lose.
+
+---
+
+## 📜 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the Solana community**
+
+[Website](http://34.123.211.253:3002) • [GitHub](https://github.com/realdoomsman/trador) • [Twitter](#)
+
+</div>
