@@ -70,7 +70,7 @@ export default {
   },
   
   // Data collection intervals
-  scanInterval: 30000,          // 30 seconds
+  scanInterval: 60000,          // 60 seconds (slower to avoid rate limits)
   priceUpdateInterval: 10000,   // 10 seconds
   analysisInterval: 60000,      // 1 minute
   

@@ -3,12 +3,15 @@ import config from '../config.js';
 
 class GeminiAnalyzer {
   constructor() {
-    this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
-    // Use gemini-1.5-flash (gemini-pro is deprecated)
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     this.analysisCache = new Map();
     this.cacheTimeout = 60000; // 1 minute cache
-    this.geminiEnabled = !!config.geminiApiKey;
+    this.geminiEnabled = false; // Disabled until proper API key is set
+    this.geminiTested = false;
+    
+    if (config.geminiApiKey) {
+      this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    }
   }
 
   // Analyze a token for trading potential
@@ -18,7 +21,24 @@ class GeminiAnalyzer {
       return this.analysisCache.get(cacheKey);
     }
 
-    // Use rule-based analysis as fallback when Gemini fails or is disabled
+    // Try Gemini once to test if it works
+    if (config.geminiApiKey && !this.geminiTested) {
+      this.geminiTested = true;
+      try {
+        const analysis = await this.geminiAnalyze(tokenData, marketContext, historicalPatterns);
+        if (analysis && analysis.confidence > 0) {
+          this.geminiEnabled = true;
+          console.log('Gemini AI enabled successfully');
+          this.analysisCache.set(cacheKey, analysis);
+          return analysis;
+        }
+      } catch (err) {
+        console.log('Gemini disabled - using rule-based analysis');
+        this.geminiEnabled = false;
+      }
+    }
+
+    // Use Gemini if it's working
     if (this.geminiEnabled) {
       try {
         const analysis = await this.geminiAnalyze(tokenData, marketContext, historicalPatterns);
@@ -27,7 +47,7 @@ class GeminiAnalyzer {
           return analysis;
         }
       } catch (err) {
-        // Gemini failed, use rule-based silently
+        // Silent fallback
       }
     }
 
@@ -136,7 +156,7 @@ Respond in JSON format only:
       const analysis = JSON.parse(jsonMatch[0]);
       return analysis;
     } catch (err) {
-      console.error('Gemini analysis failed:', err.message);
+      // Silent fail - will use rule-based
       return null;
     }
   }
@@ -176,13 +196,13 @@ Respond in JSON:
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
     } catch (err) {
-      console.error('Pattern analysis failed:', err.message);
       return null;
     }
   }
 
   // Get market sentiment
   async getMarketSentiment(recentTokens) {
+    if (!this.geminiEnabled) return { sentiment: 'neutral', confidence: 50 };
     const prompt = `Based on these recent Pump.fun token launches, what's the current market sentiment?
 
 Recent tokens (last hour):
