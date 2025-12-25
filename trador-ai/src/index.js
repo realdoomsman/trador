@@ -61,7 +61,20 @@ app.get('/api/trades', (req, res) => {
 });
 
 app.get('/api/patterns', (req, res) => {
-  res.json(brain.state.patterns || {});
+  res.json(brain.state.learnedPatterns || brain.state.patterns || {});
+});
+
+app.get('/api/backtest', (req, res) => {
+  res.json(brain.state.backtestResults || { error: 'No backtest run yet' });
+});
+
+app.post('/api/run-analysis', async (req, res) => {
+  try {
+    const patterns = await brain.runPatternAnalysis();
+    res.json({ success: true, patterns });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
 });
 
 // Main scan loop with rate limiting
@@ -119,13 +132,8 @@ async function idleAnalysis() {
   console.log('Idle mode: Running deep analysis...');
   
   try {
-    // Run pattern analysis more frequently when idle
-    await brain.analyzePatterns();
-    
-    // Backtest virtual strategies
-    if (brain.state.dataPoints > 1000) {
-      await brain.runBacktest();
-    }
+    // Run advanced pattern analysis
+    await brain.runPatternAnalysis();
   } catch (err) {
     console.error('Idle analysis error:', err.message);
   }

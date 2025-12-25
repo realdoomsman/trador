@@ -2,6 +2,7 @@ import config from '../config.js';
 import storage from './storage.js';
 import gemini from './gemini.js';
 import helius from './helius.js';
+import analytics from './analytics.js';
 
 class TradingBrain {
   constructor() {
@@ -26,10 +27,12 @@ class TradingBrain {
         avgLossPercent: 0,
         // New learning stats
         tokensTracked: 0,
-        pumps: 0,      // Tokens that went up 20%+
-        dumps: 0,      // Tokens that went down 20%+
-        neutral: 0     // Tokens that stayed flat
-      }
+        pumps: 0,
+        dumps: 0,
+        neutral: 0
+      },
+      backtestResults: null,
+      learnedPatterns: null
     };
     this.activeVirtualPositions = new Map();
     this.seenTokens = new Set();
@@ -37,9 +40,9 @@ class TradingBrain {
     this.bufferFlushSize = 100;
     
     // Price tracking for learning outcomes
-    this.trackedTokens = new Map(); // mint -> { data, entryPrice, entryTime }
+    this.trackedTokens = new Map();
     this.maxTrackedTokens = 500;
-    this.trackDuration = 30 * 60 * 1000; // Track for 30 minutes
+    this.trackDuration = 30 * 60 * 1000;
   }
 
   async initialize() {
@@ -204,44 +207,77 @@ class TradingBrain {
 
     const marketContext = {
       solPrice,
-      sentiment: 'neutral', // Will be updated by periodic sentiment analysis
+      sentiment: 'neutral',
       pumpfunActivity: 'normal'
     };
 
-    // Get AI analysis
-    const analysis = await gemini.analyzeToken(enrichedData, marketContext, this.state.patterns);
+    // Get deep analysis for this token
+    let deepAnalysis = null;
+    try {
+      deepAnalysis = await helius.getDeepTokenAnalysis(tokenData.mint);
+    } catch (err) {
+      // Continue without deep analysis
+    }
+
+    // Use advanced analytics engine
+    const advancedAnalysis = await analytics.analyzeToken(enrichedData, deepAnalysis);
+    
+    // Get AI analysis (Gemini or rule-based)
+    const geminiAnalysis = await gemini.analyzeToken(enrichedData, marketContext, this.state.patterns);
+    
+    // Combine analyses
+    const combinedAnalysis = {
+      ...geminiAnalysis,
+      advancedScore: advancedAnalysis.score,
+      advancedRecommendation: advancedAnalysis.recommendation,
+      multiTimeframe: advancedAnalysis.multiTimeframe,
+      smartWalletBuying: advancedAnalysis.smartWalletBuying,
+      dynamicExits: advancedAnalysis.exits,
+      flags: advancedAnalysis.flags,
+      finalConfidence: advancedAnalysis.confidence
+    };
     
     // Collect data point for learning
     await this.collectDataPoint(tokenData, null, null);
     
     // Track this token to learn outcome later (with deep analysis)
-    await this.trackToken(enrichedData, analysis);
+    await this.trackToken(enrichedData, combinedAnalysis);
 
     return {
       token: enrichedData,
-      analysis,
-      shouldTrade: this.shouldTrade(analysis)
+      analysis: combinedAnalysis,
+      shouldTrade: this.shouldTradeAdvanced(combinedAnalysis)
     };
   }
 
-  shouldTrade(analysis) {
+  shouldTradeAdvanced(analysis) {
     if (!analysis) return false;
-    if (analysis.recommendation !== 'BUY') return false;
     
-    const riskConfig = this.getRiskConfig();
+    // Use advanced score
+    const score = analysis.advancedScore || analysis.confidence || 0;
+    const rec = analysis.advancedRecommendation || analysis.recommendation;
     
-    // Check if analysis risk matches our profile
-    if (this.state.riskProfile === 'low' && analysis.riskLevel === 'high') return false;
-    if (this.state.riskProfile === 'medium' && analysis.riskLevel === 'high' && analysis.confidence < 80) return false;
+    if (rec === 'AVOID') return false;
     
-    // Minimum confidence threshold
-    const minConfidence = this.state.riskProfile === 'low' ? 75 : 
-                          this.state.riskProfile === 'medium' ? 65 : 55;
+    // Check multi-timeframe alignment
+    if (analysis.multiTimeframe?.allBearish) return false;
     
-    return analysis.confidence >= minConfidence;
+    // Risk profile thresholds
+    const minScore = this.state.riskProfile === 'low' ? 70 : 
+                     this.state.riskProfile === 'medium' ? 60 : 50;
+    
+    // Boost threshold if smart wallet is buying
+    const adjustedMin = analysis.smartWalletBuying ? minScore - 5 : minScore;
+    
+    return score >= adjustedMin && (rec === 'BUY' || rec === 'STRONG_BUY');
   }
 
-  // Execute virtual trade
+  shouldTrade(analysis) {
+    // Fallback to old method if no advanced analysis
+    return this.shouldTradeAdvanced(analysis);
+  }
+
+  // Execute virtual trade with dynamic exits
   async executeVirtualTrade(tokenData, analysis) {
     if (!this.state.canVirtualTrade) {
       console.log('Cannot virtual trade yet - insufficient learning');
@@ -697,6 +733,38 @@ class TradingBrain {
     } catch (err) {
       return null;
     }
+  }
+
+  // Run pattern analysis using analytics engine
+  async runPatternAnalysis() {
+    console.log('Running advanced pattern analysis...');
+    const trainingData = await storage.loadTrainingData('market_data', 1000);
+    
+    if (trainingData.length < 50) {
+      console.log('Not enough data for pattern analysis');
+      return null;
+    }
+
+    const patterns = await analytics.analyzePatterns(trainingData);
+    if (patterns) {
+      this.state.learnedPatterns = patterns;
+      console.log(`Pattern analysis complete. Found ${patterns.winningCombos?.length || 0} winning combos`);
+      
+      // Run backtest
+      const backtest = await analytics.runBacktest({ minScore: 60 }, trainingData);
+      this.state.backtestResults = backtest;
+      console.log(`Backtest: ${backtest.totalTrades} trades, ${(backtest.winRate * 100).toFixed(1)}% win rate, ${backtest.returnPercent?.toFixed(1)}% return`);
+      
+      this.saveState();
+    }
+    
+    return patterns;
+  }
+
+  // Run backtest with custom strategy
+  async runBacktest(strategy = { minScore: 60 }) {
+    const trainingData = await storage.loadTrainingData('market_data', 500);
+    return analytics.runBacktest(strategy, trainingData);
   }
 }
 
