@@ -218,3 +218,15 @@ h4 { color: #333; margin-bottom: 4px; font-size: 11px; }
 .fi-link:hover { text-decoration: underline; }
 .fi-ca { margin-bottom: 4px; }
 .fi-mint { font-size: 9px; color: #999; font-family: monospace; word-break: break-all; }
+
+/* Feed item buttons and links */
+.fi-verified { background: linear-gradient(135deg, #00d4aa, #00aa88); color: #fff; font-size: 9px; padding: 1px 5px; font-weight: bold; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+.fi-source { font-size: 9px; color: #999; font-style: italic; }
+.fi-contract { display: flex; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; align-items: center; }
+.fi-copy { background: var(--win); border: 1px solid var(--win-dark); padding: 2px 6px; font-size: 10px; cursor: pointer; }
+.fi-copy:hover { background: #d4d4d4; }
+.fi-copy:active { background: #bbb; }
+.fi-link { font-size: 10px; color: var(--blue); text-decoration: none; padding: 2px 4px; }
+.fi-link:hover { text-decoration: underline; background: rgba(0,0,128,0.1); }
+.fi-ca { margin-bottom: 4px; }
+.fi-mint { font-size: 9px; color: #999; font-family: monospace; word-break: break-all; }
