@@ -3,12 +3,12 @@ import config from '../config.js';
 
 class MultiAIEngine {
   constructor() {
-    // API Keys (from config/env)
+    // API Keys (from config)
     this.geminiKey = config.geminiApiKey;
-    this.openaiKey = process.env.OPENAI_API_KEY || null;
-    this.claudeKey = process.env.CLAUDE_API_KEY || null;
-    this.groqKey = process.env.GROQ_API_KEY || null;
-    this.perplexityKey = process.env.PERPLEXITY_API_KEY || null;
+    this.openaiKey = config.openaiApiKey;
+    this.claudeKey = config.claudeApiKey;
+    this.groqKey = config.groqApiKey;
+    this.perplexityKey = config.perplexityApiKey;
     
     // Track which AIs are available
     this.availableAIs = [];

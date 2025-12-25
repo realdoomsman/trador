@@ -8,6 +8,12 @@ export default {
   // Gemini
   geminiApiKey: process.env.GEMINI_API_KEY,
   
+  // Multi-AI Keys
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  claudeApiKey: process.env.CLAUDE_API_KEY,
+  groqApiKey: process.env.GROQ_API_KEY,
+  perplexityApiKey: process.env.PERPLEXITY_API_KEY,
+  
   // Birdeye API (best for Pump.fun tokens)
   birdeyeApiKey: process.env.BIRDEYE_API_KEY,
   
