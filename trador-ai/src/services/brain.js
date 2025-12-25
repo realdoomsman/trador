@@ -198,16 +198,18 @@ class TradingBrain {
 
   // Analyze a token for potential trade
   async analyzeToken(tokenData) {
-    // Skip if already seen recently
+    // Clear seen tokens cache every 30 minutes to allow re-analysis
+    if (!this.lastSeenClear || Date.now() - this.lastSeenClear > 30 * 60 * 1000) {
+      this.seenTokens.clear();
+      this.lastSeenClear = Date.now();
+      console.log('[CACHE] Cleared seen tokens cache - will re-analyze all tokens');
+    }
+    
+    // Skip if already seen in this 30-min window
     if (this.seenTokens.has(tokenData.mint)) {
       return null;
     }
     this.seenTokens.add(tokenData.mint);
-    
-    // Clean up old seen tokens
-    if (this.seenTokens.size > 10000) {
-      this.seenTokens.clear();
-    }
 
     const riskConfig = this.getRiskConfig();
     
