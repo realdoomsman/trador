@@ -119,6 +119,11 @@ app.get('/api/social', (req, res) => {
   });
 });
 
+// Recent token analyses for live feed
+app.get('/api/recent', (req, res) => {
+  res.json(brain.recentAnalyses || []);
+});
+
 // Main scan loop with rate limiting
 async function scanLoop() {
   try {

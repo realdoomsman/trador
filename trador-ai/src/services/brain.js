@@ -49,6 +49,10 @@ class TradingBrain {
     this.trackedTokens = new Map();
     this.maxTrackedTokens = 500;
     this.trackDuration = 10 * 60 * 1000; // 10 minutes for faster learning
+    
+    // Recent analyses for dashboard display
+    this.recentAnalyses = [];
+    this.maxRecentAnalyses = 50;
   }
 
   async initialize() {
@@ -433,6 +437,28 @@ class TradingBrain {
     
     console.log(`[ANALYZE] ${enrichedData.symbol} | $${(marketCap/1000).toFixed(0)}k mcap | Score: ${combinedAnalysis.advancedScore || 0} | AI: ${aiVotes} | ${combinedAnalysis.advancedRecommendation || 'HOLD'} | ${shouldTrade ? 'TRADE' : 'SKIP'} | Flags: ${topFlags}`);
 
+
+    // Store for dashboard display
+    this.recentAnalyses.unshift({
+      timestamp: Date.now(),
+      symbol: enrichedData.symbol,
+      name: enrichedData.name,
+      mint: enrichedData.mint,
+      marketCap,
+      score: combinedAnalysis.advancedScore || 0,
+      recommendation: combinedAnalysis.advancedRecommendation || "HOLD",
+      shouldTrade,
+      aiVotes: aiConsensus?.votes || { buy: 0, sell: 0, hold: 0 },
+      aiConsensus: aiConsensus?.consensus || "HOLD",
+      aiAgreement: aiConsensus?.agreement || 0,
+      flags: combinedAnalysis.flags?.slice(0, 5) || [],
+      holders: enrichedData.holders || 0,
+      liquidity: enrichedData.liquidity || 0,
+      priceChange24h: enrichedData.priceChange24h || 0
+    });
+    if (this.recentAnalyses.length > this.maxRecentAnalyses) {
+      this.recentAnalyses = this.recentAnalyses.slice(0, this.maxRecentAnalyses);
+    }
     return {
       token: enrichedData,
       analysis: combinedAnalysis,
