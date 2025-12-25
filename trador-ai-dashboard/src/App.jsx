@@ -197,6 +197,40 @@ function App() {
             </div>
           )}
         </div>
+
+        {/* Alpha Engine */}
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>Alpha Engine</h2>
+          <div style={{
+            ...styles.regimeBadge,
+            background: status?.marketRegime === 'bull' ? '#00aa55' : 
+                       status?.marketRegime === 'bear' ? '#cc3333' : 
+                       status?.marketRegime === 'volatile' ? '#cc8800' : '#555'
+          }}>
+            {(status?.marketRegime || 'neutral').toUpperCase()} MARKET
+          </div>
+          <div style={styles.alphaGrid}>
+            <div style={styles.alphaItem}>
+              <div style={styles.alphaValue}>{status?.portfolioHeat?.heat?.toFixed(0) || 0}%</div>
+              <div style={styles.alphaLabel}>Portfolio Heat</div>
+            </div>
+            <div style={styles.alphaItem}>
+              <div style={styles.alphaValue}>{status?.smartMoneyTracked || 0}</div>
+              <div style={styles.alphaLabel}>Smart Wallets</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 11, color: '#888', textAlign: 'center' }}>
+            {status?.regimeRecommendation?.message || 'Analyzing market...'}
+          </div>
+          <div style={{ 
+            marginTop: 8, 
+            fontSize: 10, 
+            color: status?.isOptimalTime ? '#00ff88' : '#ff8800',
+            textAlign: 'center'
+          }}>
+            {status?.isOptimalTime ? '✓ Optimal trading time' : '⚠ Suboptimal trading time'}
+          </div>
+        </div>
       </div>
 
       {/* Virtual Trading Stats */}
@@ -370,7 +404,13 @@ const styles = {
   tableHeader: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '12px 16px', background: '#1a1a2e', fontSize: 12, color: '#888', textTransform: 'uppercase' },
   tableRow: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '12px 16px', borderBottom: '1px solid #1a1a2e', fontSize: 13 },
   link: { color: '#00ccff', textDecoration: 'none' },
-  reason: { fontSize: 11, color: '#888', textTransform: 'uppercase' }
+  reason: { fontSize: 11, color: '#888', textTransform: 'uppercase' },
+  // Alpha engine styles
+  regimeBadge: { textAlign: 'center', padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 700, marginBottom: 16, color: '#fff' },
+  alphaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  alphaItem: { textAlign: 'center', padding: 12, background: '#1a1a2e', borderRadius: 8 },
+  alphaValue: { fontSize: 20, fontWeight: 700, color: '#00ccff' },
+  alphaLabel: { fontSize: 11, color: '#666', marginTop: 4 }
 };
 
 export default App;

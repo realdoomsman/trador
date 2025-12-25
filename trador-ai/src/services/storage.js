@@ -180,6 +180,22 @@ class CloudStorage {
     }
     return outcomes;
   }
+
+  // Save alpha engine state
+  async saveAlphaState(state) {
+    const localPath = path.join(this.localCache, 'alpha_state.json');
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    fs.writeFileSync(localPath, JSON.stringify(state, null, 2));
+  }
+
+  // Load alpha engine state
+  async loadAlphaState() {
+    const localPath = path.join(this.localCache, 'alpha_state.json');
+    if (fs.existsSync(localPath)) {
+      return JSON.parse(fs.readFileSync(localPath, 'utf8'));
+    }
+    return null;
+  }
 }
 
 export default new CloudStorage();

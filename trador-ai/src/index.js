@@ -3,6 +3,7 @@ import brain from './services/brain.js';
 import helius from './services/helius.js';
 import rateLimiter from './services/rateLimiter.js';
 import gpuWorker from './services/gpuWorker.js';
+import alpha from './services/alpha.js';
 import express from 'express';
 import cors from 'cors';
 
@@ -77,6 +78,18 @@ app.post('/api/run-analysis', async (req, res) => {
   }
 });
 
+app.get('/api/alpha', (req, res) => {
+  const status = brain.getStatus();
+  res.json({
+    marketRegime: status.marketRegime,
+    regimeRecommendation: status.regimeRecommendation,
+    portfolioHeat: status.portfolioHeat,
+    smartMoneyTracked: status.smartMoneyTracked,
+    isOptimalTime: status.isOptimalTime,
+    bestTradingTimes: status.bestTradingTimes
+  });
+});
+
 // Main scan loop with rate limiting
 async function scanLoop() {
   try {
@@ -94,6 +107,13 @@ async function scanLoop() {
     const dataSource = helius.getDataSource();
     const isReal = dataSource !== 'synthetic' && dataSource !== 'none';
     console.log(`[${isReal ? 'REAL' : 'SYNTHETIC'}] Scanning ${tokens.length} tokens from ${dataSource}...`);
+    
+    // Update market regime detection
+    const solPrice = await helius.getSolPrice();
+    const regime = alpha.detectMarketRegime(tokens, solPrice, []);
+    if (regime.regime !== 'neutral') {
+      console.log(`Market regime: ${regime.regime.toUpperCase()} - ${regime.recommendation.message}`);
+    }
     
     // Use GPU parallel processing if available
     const results = await gpuWorker.processParallel(

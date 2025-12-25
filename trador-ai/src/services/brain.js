@@ -4,6 +4,7 @@ import gemini from './gemini.js';
 import helius from './helius.js';
 import analytics from './analytics.js';
 import learner from './learner.js';
+import alpha from './alpha.js';
 
 class TradingBrain {
   constructor() {
@@ -51,6 +52,13 @@ class TradingBrain {
     
     // Initialize self-learner
     await learner.initialize();
+    
+    // Load alpha engine state
+    const alphaState = await storage.loadAlphaState();
+    if (alphaState) {
+      alpha.fromJSON(alphaState);
+      console.log(`Alpha engine loaded: ${alpha.marketRegime} regime, ${alpha.smartMoney.size} smart wallets`);
+    }
     
     // Load saved state
     const savedState = await storage.loadModelState();
@@ -229,6 +237,12 @@ class TradingBrain {
     // Get AI analysis (Gemini or rule-based)
     const geminiAnalysis = await gemini.analyzeToken(enrichedData, marketContext, this.state.patterns);
     
+    // Get alpha engine insights
+    const momentumScore = alpha.calculateMomentumScore(enrichedData);
+    const exitStrategy = alpha.selectExitStrategy(enrichedData, advancedAnalysis, alpha.marketRegime);
+    const profitTargets = alpha.calculateProfitTargets(advancedAnalysis, alpha.marketRegime);
+    const isOptimalTime = alpha.isOptimalTradingTime();
+    
     // Combine analyses
     const combinedAnalysis = {
       ...geminiAnalysis,
@@ -238,7 +252,13 @@ class TradingBrain {
       smartWalletBuying: advancedAnalysis.smartWalletBuying,
       dynamicExits: advancedAnalysis.exits,
       flags: advancedAnalysis.flags,
-      finalConfidence: advancedAnalysis.confidence
+      finalConfidence: advancedAnalysis.confidence,
+      // Alpha engine additions
+      momentumScore,
+      exitStrategy,
+      profitTargets,
+      isOptimalTime: isOptimalTime.isOptimal,
+      marketRegime: alpha.marketRegime
     };
     
     // Collect data point for learning
@@ -291,6 +311,17 @@ class TradingBrain {
     const riskConfig = this.getRiskConfig();
     const currentPrice = tokenData.price || (tokenData.usd_market_cap / 1e9);
     
+    // Use Kelly criterion for position sizing
+    const winRate = this.state.stats.totalVirtualTrades > 10 
+      ? this.state.stats.virtualWins / this.state.stats.totalVirtualTrades 
+      : 0.5;
+    const avgWin = this.state.stats.avgWinPercent || 20;
+    const avgLoss = this.state.stats.avgLossPercent || 10;
+    const kellySize = alpha.calculateOptimalPositionSize(winRate, avgWin, avgLoss, this.state.confidence);
+    
+    // Use alpha's dynamic profit targets
+    const targets = alpha.calculateProfitTargets(analysis, alpha.marketRegime);
+    
     const trade = {
       id: `vt_${Date.now()}_${tokenData.mint.slice(0, 8)}`,
       type: 'virtual',
@@ -299,17 +330,21 @@ class TradingBrain {
       entryPrice: currentPrice,
       entryMarketCap: tokenData.usd_market_cap,
       entryTime: Date.now(),
-      positionSize: riskConfig.maxPositionSize,
-      stopLoss: currentPrice * (1 - riskConfig.stopLoss),
-      takeProfit: currentPrice * (1 + riskConfig.takeProfit),
+      positionSize: Math.min(kellySize, riskConfig.maxPositionSize),
+      stopLoss: currentPrice * (1 - targets.stopLoss),
+      takeProfit: currentPrice * (1 + targets.takeProfit),
+      trailingActivation: currentPrice * (1 + targets.trailingActivation),
+      trailingDistance: targets.trailingDistance,
+      strategy: targets.strategy,
       analysis: analysis,
-      status: 'open'
+      status: 'open',
+      marketRegime: alpha.marketRegime
     };
 
     this.activeVirtualPositions.set(trade.id, trade);
     this.state.stats.totalVirtualTrades++;
     
-    console.log(`Virtual trade opened: ${trade.symbol} @ $${currentPrice.toFixed(8)}`);
+    console.log(`Virtual trade: ${trade.symbol} | Strategy: ${targets.strategy} | Size: ${(kellySize * 100).toFixed(1)}%`);
     
     return trade;
   }
@@ -452,6 +487,9 @@ class TradingBrain {
       stats: this.state.stats,
       pnl: this.state.pnl
     });
+    
+    // Save alpha engine state
+    await storage.saveAlphaState(alpha.toJSON());
   }
 
   getStatus() {
@@ -461,6 +499,11 @@ class TradingBrain {
       : `${dataSizeMB.toFixed(2)} MB`;
 
     const learnerStrategy = learner.getStrategy();
+    const alphaStatus = alpha.getStatus();
+    const portfolioHeat = alpha.calculatePortfolioHeat(
+      Array.from(this.activeVirtualPositions.values()), 
+      10000 // Assume $10k virtual capital
+    );
 
     return {
       confidence: this.state.confidence,
@@ -480,6 +523,13 @@ class TradingBrain {
       aiPredictions: learnerStrategy.performance.totalPredictions,
       topSignals: learnerStrategy.topSignals,
       aiRecommendation: learnerStrategy.recommendation,
+      // Alpha engine stats
+      marketRegime: alphaStatus.marketRegime,
+      regimeRecommendation: alphaStatus.regimeRecommendation,
+      portfolioHeat: portfolioHeat,
+      smartMoneyTracked: alphaStatus.smartMoneyCount,
+      isOptimalTime: alphaStatus.isOptimalTime,
+      bestTradingTimes: alphaStatus.optimalTimes,
       patterns: this.state.patterns ? {
         hasPatterns: true,
         confidenceInPatterns: this.state.patterns.confidenceInPatterns
