@@ -13,7 +13,8 @@ import bondingCurve from './bondingCurve.js';
 import pumpfunWS from './pumpfunWS.js';
 
 // ============================================================================
-// 🚀 MOONSHOT MODE - Hunting 10x-100x, not 10-20% gains
+// TRADOR AI - Self-learning trading brain
+// No hardcoded modes - AI learns optimal strategies from data
 // ============================================================================
 
 class TradingBrain {
@@ -27,7 +28,6 @@ class TradingBrain {
       isLearning: true,
       canVirtualTrade: true,
       canLiveTrade: false,
-      riskProfile: 'high', // MOONSHOT MODE = always aggressive
       virtualTrades: [],
       pnl: { daily: 0, weekly: 0, monthly: 0, allTime: 0 },
       stats: {
@@ -41,41 +41,40 @@ class TradingBrain {
         pumps: 0,
         dumps: 0,
         neutral: 0,
-        // MOONSHOT stats
-        moonshots: 0,      // 500%+ (6x)
-        mega_pumps: 0,     // 200%+ (3x)
-        strong_pumps: 0,   // 100%+ (2x)
-        pumps_50: 0,       // 50%+
-        micro_pumps: 0,    // 20%+
         avgMFE: 0,
         avgMAE: 0,
-        bestMoonshot: 0,   // Track best single trade
+        bestTrade: 0,
+      },
+      // AI-learned parameters (start with defaults, AI adjusts)
+      learnedParams: {
+        optimalPumpThreshold: config.initialPumpThreshold || 20,
+        optimalDumpThreshold: config.initialDumpThreshold || -15,
+        optimalHoldTime: 10,        // Minutes - AI learns
+        optimalPositionSize: config.defaultPositionSize || 0.03,
+        optimalEntryAge: 5,         // Token age in minutes - AI learns
+        optimalMcapRange: [5000, 100000], // AI learns
       },
       backtestResults: null,
       learnedPatterns: null
     };
+    
     this.activeVirtualPositions = new Map();
     this.seenTokens = new Set();
     this.lastSeenClear = Date.now();
     this.dataBuffer = [];
     this.bufferFlushSize = 5;
     
-    // MOONSHOT tracking - massive scale
+    // Token tracking
     this.trackedTokens = new Map();
-    this.maxTrackedTokens = config.maxTrackedTokens || 5000;  // Track 5000 tokens
+    this.maxTrackedTokens = config.maxTrackedTokens || 5000;
+    this.MAX_TRACK_TIME = (config.maxTrackTimeMinutes || 60) * 60 * 1000;
     
-    // MOONSHOT thresholds
-    this.MFE_PUMP_THRESHOLD = config.mfePumpThreshold || 50;   // 50% = success
-    this.MAE_DUMP_THRESHOLD = config.maeDumpThreshold || -30;  // -30% = failure
-    this.MICRO_PUMP_THRESHOLD = config.microPumpThreshold || 20;
-    this.MAX_TRACK_TIME = (config.maxTrackTimeMinutes || 60) * 60 * 1000; // 1 HOUR tracking
-    
-    // MOONSHOT outcome windows - up to 1 hour
+    // Outcome windows - AI learns which matter
     this.outcomeWindows = config.outcomeWindows || [1, 2, 5, 10, 15, 30, 45, 60];
     
     // Recent analyses for dashboard
     this.recentAnalyses = [];
-    this.maxRecentAnalyses = 200;  // More history
+    this.maxRecentAnalyses = 200;
   }
 
   async initialize() {
@@ -1380,82 +1379,43 @@ class TradingBrain {
     }
   }
 
-  // Classify volatility into buckets - MOONSHOT MODE
-  // 🚀 Hunting 10x-100x, not 10-20% gains
-  // Thresholds: micro=20%, pump=50%, strong=100% (2x), mega=200% (3x), moonshot=500% (6x)
+  // Classify volatility - AI learns optimal thresholds
+  // Uses learned parameters, not hardcoded values
   classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     
-    // MOONSHOT THRESHOLDS - Same for all market caps
-    // We're hunting for 10x-100x, not small gains
-    const microThreshold = config.microPumpThreshold || 20;      // 20% = micro
-    const pumpThreshold = config.pumpThreshold || 50;            // 50% = pump
-    const strongThreshold = config.strongPumpThreshold || 100;   // 100% = strong (2x)
-    const megaThreshold = config.megaPumpThreshold || 200;       // 200% = mega (3x)
-    const moonshotThreshold = config.moonshotThreshold || 500;   // 500% = MOONSHOT (6x)
-    
-    // Dump thresholds
-    const microDumpThreshold = config.microDumpThreshold || -15;
-    const dumpThreshold = config.dumpThreshold || -30;
-    const strongDumpThreshold = config.strongDumpThreshold || -50;
+    // Get AI-learned threshold (or use initial default)
+    const pumpThreshold = this.state.learnedParams?.optimalPumpThreshold || 
+                          config.initialPumpThreshold || 20;
+    const dumpThreshold = this.state.learnedParams?.optimalDumpThreshold || 
+                          config.initialDumpThreshold || -15;
     
     let bucket;
     let direction;
     
-    // MFE-PRIMARY: Check maxUp FIRST - if it hit the threshold at ANY point, it's a pump
-    // A token that hit +500% then crashed to -50% is still a "moonshot" - we COULD have sold
-    
-    // 🌙 MOONSHOT: 500%+ (6x) at any point
-    if (maxUp >= moonshotThreshold) {
-      bucket = 'moonshot';
+    // Simple classification - AI learns what thresholds work best
+    // MFE-PRIMARY: If it hit the threshold at ANY point, classify by peak
+    if (maxUp >= pumpThreshold * 5) {
+      bucket = 'massive_pump';  // 5x the threshold
       direction = 'up';
-    }
-    // 🚀 MEGA PUMP: 200%+ (3x)
-    else if (maxUp >= megaThreshold) {
-      bucket = 'mega_pump';
+    } else if (maxUp >= pumpThreshold * 2) {
+      bucket = 'strong_pump';   // 2x the threshold
       direction = 'up';
-    }
-    // 💪 STRONG PUMP: 100%+ (2x)
-    else if (maxUp >= strongThreshold) {
-      bucket = 'strong_pump';
-      direction = 'up';
-    }
-    // 📈 PUMP: 50%+
-    else if (maxUp >= pumpThreshold) {
+    } else if (maxUp >= pumpThreshold) {
       bucket = 'pump';
       direction = 'up';
-    }
-    // 📊 MICRO PUMP: 20%+
-    else if (maxUp >= microThreshold) {
-      bucket = 'micro_pump';
-      direction = 'up';
-    }
-    // 💀 STRONG DUMP: -50%+ (only if never pumped)
-    else if (maxDown <= strongDumpThreshold) {
+    } else if (maxDown <= dumpThreshold * 2) {
       bucket = 'strong_dump';
       direction = 'down';
-    }
-    // 📉 DUMP: -30%+
-    else if (maxDown <= dumpThreshold) {
+    } else if (maxDown <= dumpThreshold) {
       bucket = 'dump';
       direction = 'down';
-    }
-    // 📉 MICRO DUMP: -15%+
-    else if (maxDown <= microDumpThreshold) {
-      bucket = 'micro_dump';
-      direction = 'down';
-    }
-    // 😐 CHOP: Less than ±15-20%
-    else {
-      bucket = 'chop';
+    } else {
+      bucket = 'neutral';
       direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     }
     
-    // Log classification
-    const emoji = bucket === 'moonshot' ? '🌙' : bucket === 'mega_pump' ? '🚀' : 
-                  bucket === 'strong_pump' ? '💪' : bucket.includes('pump') ? '📈' :
-                  bucket.includes('dump') ? '📉' : '😐';
-    console.log(`[CLASSIFY] ${emoji} maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% mcap=${(marketCap/1000).toFixed(0)}k => ${bucket}`);
+    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% => ${bucket} (threshold: ${pumpThreshold}%)`);
     
     return { 
       bucket, 
@@ -1464,71 +1424,78 @@ class TradingBrain {
       maxUp, 
       maxDown, 
       marketCap,
-      // Thresholds used
-      microThreshold,
-      pumpThreshold, 
-      strongThreshold,
-      megaThreshold,
-      moonshotThreshold,
-      // Multiplier achieved
+      pumpThreshold,
+      dumpThreshold,
       multiplier: maxUp > 0 ? (100 + maxUp) / 100 : 0,
-      // Flag if this was a retracement (hit target then crashed)
-      wasRetracementPump: maxUp >= pumpThreshold && maxDown <= dumpThreshold
     };
   }
 
-  // Update stats based on volatility bucket - MOONSHOT MODE
+  // Update stats - simple counters
   updateVolatilityStats(outcome) {
-    // Initialize all counters
-    if (!this.state.stats.moonshots) this.state.stats.moonshots = 0;
-    if (!this.state.stats.mega_pumps) this.state.stats.mega_pumps = 0;
+    if (!this.state.stats.massive_pumps) this.state.stats.massive_pumps = 0;
     if (!this.state.stats.strong_pumps) this.state.stats.strong_pumps = 0;
-    if (!this.state.stats.pumps_50) this.state.stats.pumps_50 = 0;
-    if (!this.state.stats.micro_pumps) this.state.stats.micro_pumps = 0;
-    if (!this.state.stats.chops) this.state.stats.chops = 0;
-    if (!this.state.stats.micro_dumps) this.state.stats.micro_dumps = 0;
-    if (!this.state.stats.dumps_30) this.state.stats.dumps_30 = 0;
+    if (!this.state.stats.pumps_count) this.state.stats.pumps_count = 0;
+    if (!this.state.stats.neutrals) this.state.stats.neutrals = 0;
+    if (!this.state.stats.dumps_count) this.state.stats.dumps_count = 0;
     if (!this.state.stats.strong_dumps) this.state.stats.strong_dumps = 0;
     
     switch (outcome.bucket) {
-      case 'moonshot': 
-        this.state.stats.moonshots++; 
+      case 'massive_pump': 
+        this.state.stats.massive_pumps++; 
         this.state.stats.pumps++; 
-        console.log(`🌙 MOONSHOT DETECTED! Total: ${this.state.stats.moonshots}`);
-        break;
-      case 'mega_pump': 
-        this.state.stats.mega_pumps++; 
-        this.state.stats.pumps++; 
-        console.log(`🚀 MEGA PUMP! Total: ${this.state.stats.mega_pumps}`);
+        if (outcome.maxUp > this.state.stats.bestTrade) {
+          this.state.stats.bestTrade = outcome.maxUp;
+        }
+        console.log(`🚀 MASSIVE PUMP! +${outcome.maxUp.toFixed(1)}% | Best: ${this.state.stats.bestTrade.toFixed(1)}%`);
         break;
       case 'strong_pump': 
         this.state.stats.strong_pumps++; 
         this.state.stats.pumps++; 
         break;
       case 'pump': 
-        this.state.stats.pumps_50++; 
+        this.state.stats.pumps_count++; 
         this.state.stats.pumps++; 
         break;
-      case 'micro_pump': 
-        this.state.stats.micro_pumps++; 
-        this.state.stats.pumps++; 
-        break;
-      case 'chop': 
-        this.state.stats.chops++; 
+      case 'neutral': 
+        this.state.stats.neutrals++; 
         this.state.stats.neutral++; 
         break;
-      case 'micro_dump': 
-        this.state.stats.micro_dumps++; 
-        this.state.stats.dumps++; 
-        break;
       case 'dump': 
-        this.state.stats.dumps_30++; 
+        this.state.stats.dumps_count++; 
         this.state.stats.dumps++; 
         break;
       case 'strong_dump': 
         this.state.stats.strong_dumps++; 
         this.state.stats.dumps++; 
         break;
+    }
+    
+    // AI LEARNING: Adjust thresholds based on outcomes
+    this.adjustLearnedParams(outcome);
+  }
+  
+  // AI learns optimal parameters from outcomes
+  adjustLearnedParams(outcome) {
+    if (!this.state.learnedParams) return;
+    
+    const learningRate = config.learnerLearningRate || 0.1;
+    const totalOutcomes = this.state.stats.pumps + this.state.stats.dumps + this.state.stats.neutral;
+    
+    // Only adjust after enough data
+    if (totalOutcomes < 20) return;
+    
+    // If we're missing pumps (too many neutrals), lower threshold
+    const pumpRate = this.state.stats.pumps / totalOutcomes;
+    if (pumpRate < 0.1 && this.state.learnedParams.optimalPumpThreshold > 5) {
+      this.state.learnedParams.optimalPumpThreshold *= (1 - learningRate);
+      console.log(`[LEARN] Lowered pump threshold to ${this.state.learnedParams.optimalPumpThreshold.toFixed(1)}%`);
+    }
+    
+    // If we're catching too many dumps, raise threshold
+    const dumpRate = this.state.stats.dumps / totalOutcomes;
+    if (dumpRate > 0.5 && this.state.learnedParams.optimalPumpThreshold < 100) {
+      this.state.learnedParams.optimalPumpThreshold *= (1 + learningRate);
+      console.log(`[LEARN] Raised pump threshold to ${this.state.learnedParams.optimalPumpThreshold.toFixed(1)}%`);
     }
   }
 
