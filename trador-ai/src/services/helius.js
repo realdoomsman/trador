@@ -319,28 +319,24 @@ class HeliusService {
     return verifiedTokens;
   }
 
-  // Birdeye API - Best source for Solana tokens (Standard plan - 500 req/min)
+  // Birdeye API - Focus on NEW, SMALL tokens that can 100x
   async getBirdeyeTokens() {
     if (!this.birdeyeKey) return [];
     
     const allTokens = [];
     
-    // Fetch from multiple timeframes for maximum variety (increased limits for Standard plan)
+    // Focus on finding early-stage tokens with pump potential
     const endpoints = [
-      // Super fresh - 30min volume (catching pumps early)
+      // NEW tokens - recently created (most important for 100x plays)
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=createdAt&sort_type=desc&offset=0&limit=50', name: 'newest' },
+      // Recently traded - fresh activity on new tokens
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=40', name: 'recent trades' },
+      // 30min volume - catching pumps as they start
       { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mUSD&sort_type=desc&offset=0&limit=30', name: '30m vol' },
-      // 1h volume - active tokens
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=30', name: '1h vol' },
-      // 4h volume - medium term movers
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v4hUSD&sort_type=desc&offset=0&limit=25', name: '4h vol' },
-      // 24h volume - established tokens
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=25', name: '24h vol' },
-      // Recently traded - fresh activity
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=30', name: 'recent' },
-      // Price change movers - gainers
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=20', name: '1h gainers' },
-      // Price change movers - losers (potential bounce plays)
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=asc&offset=0&limit=15', name: '1h losers' }
+      // 1h gainers - tokens already pumping
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=30', name: '1h gainers' },
+      // 30m gainers - very recent pumps
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mChangePercent&sort_type=desc&offset=0&limit=30', name: '30m gainers' }
     ];
     
     for (const { url, name } of endpoints) {
@@ -362,6 +358,13 @@ class HeliusService {
           // Skip if already added
           if (allTokens.find(x => x.mint === t.address)) continue;
           
+          // FILTER: Only small cap tokens with pump potential
+          const mcap = t.mc || t.realMc || 0;
+          
+          // Skip tokens that are too big (already pumped) or too small (no liquidity)
+          if (mcap > 5000000) continue; // Skip >$5M mcap (already discovered)
+          if (mcap < 1000) continue; // Skip <$1k (no liquidity/dead)
+          
           allTokens.push({
             mint: t.address,
             symbol: t.symbol,
@@ -373,7 +376,7 @@ class HeliusService {
             priceChange4h: t.v4hChangePercent || 0,
             priceChange24h: t.v24hChangePercent || 0,
             // Market data
-            usd_market_cap: t.mc || t.realMc || 0,
+            usd_market_cap: mcap,
             fdv: t.fdv || 0,
             virtual_sol_reserves: t.liquidity || 0,
             // Volume data
