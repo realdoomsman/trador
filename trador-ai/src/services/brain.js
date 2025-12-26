@@ -751,8 +751,21 @@ class TradingBrain {
       if (oldest) this.trackedTokens.delete(oldest[0]);
     }
 
-    const price = tokenData.price || (tokenData.usd_market_cap / 1e9) || 0;
-    if (price <= 0) return;
+    // Get accurate entry price - this is critical for outcome learning
+    let price = tokenData.price;
+    
+    // If no price from token data, fetch it
+    if (!price || price <= 0) {
+      const priceData = await this.getTokenPrice(tokenData.mint);
+      price = priceData?.price || 0;
+    }
+    
+    if (price <= 0) {
+      console.log(`[TRACK] Skipping ${tokenData.symbol} - no valid price`);
+      return;
+    }
+    
+    console.log(`[TRACK] ${tokenData.symbol} at $${price.toFixed(8)} (mcap: $${(tokenData.usd_market_cap/1000).toFixed(0)}k)`);
 
     // Get deep on-chain analysis (holder distribution, security, etc)
     let deepAnalysis = null;
@@ -839,7 +852,7 @@ class TradingBrain {
     const readyCount = [...this.trackedTokens.values()].filter(t => now - t.entryTime >= this.trackDuration).length;
     
     if (readyCount > 0) {
-      console.log(`Checking ${readyCount} tokens ready for outcome learning...`);
+      console.log(`[OUTCOME] Checking ${readyCount} tokens ready for outcome learning...`);
     }
     
     for (const [mint, tracked] of this.trackedTokens) {
@@ -847,17 +860,29 @@ class TradingBrain {
       if (now - tracked.entryTime < this.trackDuration) continue;
       
       try {
-        // Get current price from Birdeye
+        // Get current price from multiple sources
         const currentData = await this.getTokenPrice(mint);
+        
+        // Debug: Log price fetch results
         if (!currentData || !currentData.price) {
-          console.log(`Could not get price for ${tracked.symbol} (${mint.slice(0,8)}...) - skipping`);
+          console.log(`[OUTCOME] No price for ${tracked.symbol} - entry was $${tracked.entryPrice?.toFixed(8) || 'N/A'}`);
+          toRemove.push(mint);
+          continue;
+        }
+        
+        // Validate entry price
+        if (!tracked.entryPrice || tracked.entryPrice <= 0) {
+          console.log(`[OUTCOME] Invalid entry price for ${tracked.symbol}: ${tracked.entryPrice}`);
           toRemove.push(mint);
           continue;
         }
 
         const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
         
-        // Classify outcome (±20% for real pump/dump detection)
+        // Debug: Log price comparison
+        console.log(`[OUTCOME] ${tracked.symbol}: $${tracked.entryPrice.toFixed(8)} -> $${currentData.price.toFixed(8)} = ${pnlPercent.toFixed(1)}% (${currentData.source})`);
+        
+        // Classify outcome - 20% threshold for pump/dump
         let outcome;
         if (pnlPercent >= 20) {
           outcome = 'pump';
@@ -1003,8 +1028,9 @@ class TradingBrain {
     }
   }
 
-  // Get token price from Birdeye
+  // Get token price from multiple sources
   async getTokenPrice(mint) {
+    // Try Birdeye first
     try {
       const res = await fetch(`https://public-api.birdeye.so/defi/price?address=${mint}`, {
         headers: {
@@ -1012,20 +1038,43 @@ class TradingBrain {
           'x-chain': 'solana'
         }
       });
-      if (!res.ok) {
-        console.log(`Birdeye price API error: ${res.status} for ${mint.slice(0,8)}...`);
-        return null;
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data?.value && data.data.value > 0) {
+          return { price: data.data.value, source: 'birdeye' };
+        }
       }
-      const data = await res.json();
-      if (data.data?.value) {
-        return { price: data.data.value };
-      }
-      console.log(`No price data from Birdeye for ${mint.slice(0,8)}...`);
-      return null;
     } catch (err) {
-      console.log(`Price fetch error for ${mint.slice(0,8)}...: ${err.message}`);
-      return null;
+      // Try fallback
     }
+    
+    // Fallback to Jupiter
+    try {
+      const res = await fetch(`https://price.jup.ag/v6/price?ids=${mint}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data?.[mint]?.price && data.data[mint].price > 0) {
+          return { price: data.data[mint].price, source: 'jupiter' };
+        }
+      }
+    } catch (err) {
+      // Try DexScreener
+    }
+    
+    // Fallback to DexScreener
+    try {
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.pairs?.[0]?.priceUsd) {
+          return { price: parseFloat(data.pairs[0].priceUsd), source: 'dexscreener' };
+        }
+      }
+    } catch (err) {
+      // All failed
+    }
+    
+    return null;
   }
 
   // Run pattern analysis using analytics engine

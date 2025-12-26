@@ -416,10 +416,7 @@ class HeliusService {
       }
     }
     
-    console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens (30m/1h/4h/24h vol + recent + gainers)`);
-    return allTokens;
-    
-    console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens from multiple timeframes`);
+    console.log(`[BIRDEYE] Fetched ${allTokens.length} unique tokens (24h/1h vol + low mcap + liquidity)`);
     return allTokens;
   }
 
