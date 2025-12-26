@@ -118,11 +118,12 @@ class TradingBrain {
     this.state.virtualTrades = virtualTrades;
     this.calculatePnL();
     
-    // FIXED: Start with ability to trade
+    // FIXED: Start with ability to trade and recalculate confidence
     this.state.canVirtualTrade = true;
-    this.state.confidence = Math.max(50, this.state.confidence);
+    await this.updateConfidence(); // Recalculate from current data
     
     console.log(`Brain initialized. Confidence: ${this.state.confidence}%, Can virtual trade: ${this.state.canVirtualTrade}`);
+    console.log(`Data: ${this.state.dataPoints} points, ${this.state.stats.tokensTracked || 0} tokens tracked`);
     console.log(`Learner accuracy: ${learner.performance.accuracy.toFixed(1)}% from ${learner.performance.totalPredictions} predictions`);
   }
 
@@ -199,26 +200,32 @@ class TradingBrain {
   }
 
   async updateConfidence() {
-    // Base confidence from data quantity
-    let confidence = Math.min(50, (this.state.dataPoints / config.minDataPointsForVirtualTrading) * 50);
+    // Start at 50% - we're always learning
+    let confidence = 50;
     
-    // Add confidence from virtual trading performance
+    // Add confidence from data quantity (up to +20%)
+    const dataBonus = Math.min(20, (this.state.dataPoints / 100) * 20);
+    confidence += dataBonus;
+    
+    // Add confidence from virtual trading performance (up to +20%)
     if (this.state.stats.totalVirtualTrades > 0) {
       const winRate = this.state.stats.virtualWins / this.state.stats.totalVirtualTrades;
-      const performanceBonus = Math.min(30, winRate * 50);
+      const performanceBonus = Math.min(20, winRate * 40);
       confidence += performanceBonus;
     }
     
-    // Add confidence from pattern recognition
+    // Add confidence from pattern recognition (up to +10%)
     if (this.state.patterns?.confidenceInPatterns) {
-      confidence += Math.min(20, this.state.patterns.confidenceInPatterns * 0.2);
+      confidence += Math.min(10, this.state.patterns.confidenceInPatterns * 0.1);
     }
     
-    // Apply decay if no recent data
+    // Minimal decay - don't punish for not trading
     const hoursSinceUpdate = (Date.now() - (this.state.lastTrainingUpdate || 0)) / 3600000;
-    confidence *= Math.max(0.5, 1 - (hoursSinceUpdate * config.confidenceDecayRate));
+    if (hoursSinceUpdate > 24) {
+      confidence *= 0.95; // Only 5% decay after 24 hours
+    }
     
-    this.state.confidence = Math.min(100, Math.max(0, Math.round(confidence)));
+    this.state.confidence = Math.min(100, Math.max(50, Math.round(confidence)));
     this.state.lastTrainingUpdate = Date.now();
     this.updateCapabilities();
   }
