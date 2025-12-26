@@ -85,8 +85,8 @@ export default {
   outcomeCheckInterval: 30000,  // 30 seconds - check outcomes more frequently
   
   // FIXED: Multiple outcome check windows (in minutes)
-  // Added 1-minute window for faster learning on memecoins
-  outcomeWindows: [1, 3, 5, 10],   // Check at 1, 3, 5, and 10 minutes
+  // EXPANDED: Added 0.5min (30s) and 2min for faster learning
+  outcomeWindows: [0.5, 1, 2, 3, 5, 10],   // Check at 30s, 1, 2, 3, 5, and 10 minutes
   pumpThreshold: 8,             // 8% = pump (lowered from 10% - most good pumps are 8-12%)
   microPumpThreshold: 4,        // 4-8% = micro-pump
   dumpThreshold: -8,            // -8% = dump (lowered from -10%)
@@ -98,7 +98,7 @@ export default {
   // Token tracking
   maxTrackedTokens: 800,        // Increased from 300 to 800
   maxTrackTimeMinutes: 10,      // Max tracking time
-  tokensPerScan: 100,           // Increased from 35 to 100
+  tokensPerScan: 150,           // Increased from 100 to 150 for better coverage
   
   // FIXED: Lower data requirements to start trading sooner
   minDataPointsForTraining: 20,

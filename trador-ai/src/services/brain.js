@@ -276,6 +276,7 @@ class TradingBrain {
     
     if (isPumpFun) {
       try {
+        // Get sniper analysis
         const sniperAnalysis = await helius.getSniperAnalysis(tokenData.mint);
         if (sniperAnalysis?.analyzed) {
           enrichedData.sniperCount = sniperAnalysis.sniperCount;
@@ -284,8 +285,22 @@ class TradingBrain {
           enrichedData.bundleRisk = sniperAnalysis.bundleRisk;
           enrichedData.sniperConcentration = sniperAnalysis.sniperConcentration;
         }
+        
+        // Get high-edge early signals for sub-2min tokens
+        if (enrichedData.ageMinutes < 2) {
+          const earlySignals = await helius.getEarlySignals(tokenData.mint, enrichedData.ageMinutes);
+          if (earlySignals?.analyzed) {
+            enrichedData.txnsPerMinute = earlySignals.txnsPerMinute;
+            enrichedData.uniqueBuysPerMinute = earlySignals.uniqueBuysPerMinute;
+            enrichedData.uniqueBuyerGrowthRate = earlySignals.uniqueBuyerGrowthRate;
+            enrichedData.avgBuySizeSol = earlySignals.avgBuySizeSol;
+            enrichedData.avgBuySizeTrend = earlySignals.avgBuySizeTrend;
+            enrichedData.creatorBoughtEarly = earlySignals.creatorBoughtEarly;
+            enrichedData.creatorSoldEarly = earlySignals.creatorSoldEarly;
+          }
+        }
       } catch (err) {
-        // Continue without sniper analysis
+        // Continue without sniper/early analysis
       }
     }
     
@@ -571,14 +586,13 @@ class TradingBrain {
 
   // FAST ENTRY FILTER - For early pump.fun tokens (NO AI LATENCY)
   // Returns { pass: boolean, reason: string, signals: object }
-  // UPDATED: Changed zone from 60-85% to 30-75% (avoid exit liquidity zone)
-  // ADDED: Bundle guard to reject high-sniper bundled launches
+  // UPDATED: Age < 1.5min, BC 55-88%, velocity > 1.8, uniqueBuys >= 12
   passesFastEntryFilter(tokenData, deepAnalysis = null) {
     const ageMinutes = tokenData.ageMinutes || 
       ((Date.now() - new Date(tokenData.created_timestamp).getTime()) / 60000);
     
-    // Only for very early tokens (< 2 minutes old)
-    if (ageMinutes >= 2) {
+    // Only for very early tokens (< 1.5 minutes old) - tightened from 2min
+    if (ageMinutes >= 1.5) {
       return { pass: false, reason: 'too_old', signals: null };
     }
     
@@ -586,9 +600,9 @@ class TradingBrain {
     const bcProgress = tokenData.bondingCurveProgress || 
       bondingCurve.calculateProgress(tokenData.virtual_sol_reserves || 0);
     
-    // UPDATED: Must be in the 30-75% zone (avoid 85% exit liquidity trap)
-    // 85% is where early snipers dump before Raydium migration
-    if (bcProgress < 30 || bcProgress > 75) {
+    // UPDATED: Must be in the 55-88% zone (widened from 30-75%)
+    // 55% = enough momentum, 88% = just before exit liquidity trap
+    if (bcProgress < 55 || bcProgress > 88) {
       return { pass: false, reason: `bc_progress_${bcProgress.toFixed(0)}%`, signals: null };
     }
     
@@ -598,9 +612,9 @@ class TradingBrain {
       tokenData.virtual_sol_reserves || 0
     );
     
-    // Must have positive velocity (buyers increasing)
-    if (velocityAnalysis.velocity <= 0) {
-      return { pass: false, reason: 'no_momentum', signals: null };
+    // UPDATED: Must have strong velocity > 1.8 (not just > 0)
+    if (velocityAnalysis.velocity <= 1.8) {
+      return { pass: false, reason: `low_velocity_${velocityAnalysis.velocity.toFixed(1)}`, signals: null };
     }
     
     // BUNDLE GUARD: Check sniper/bundle data if available
@@ -630,6 +644,23 @@ class TradingBrain {
       earlySignals.isBundled = tokenData.isBundled ? 1 : 0;
     }
     
+    // NEW: Check unique buys per minute >= 12 (strong organic growth signal)
+    const uniqueBuysPerMinute = earlySignals.uniqueBuysPerMinute || tokenData.uniqueBuysPerMinute || 0;
+    if (uniqueBuysPerMinute < 12 && uniqueBuysPerMinute > 0) {
+      return { pass: false, reason: `low_unique_buys_${uniqueBuysPerMinute.toFixed(0)}`, signals: earlySignals };
+    }
+    
+    // NEW: Check avg buy size trend (prefer increasing)
+    const avgBuySizeTrend = earlySignals.avgBuySizeTrend || tokenData.avgBuySizeTrend || 'stable';
+    if (avgBuySizeTrend === 'decreasing') {
+      return { pass: false, reason: 'declining_buy_size', signals: earlySignals };
+    }
+    
+    // NEW: Red flag if creator sold early
+    if (tokenData.creatorSoldEarly || earlySignals.creatorSoldEarly) {
+      return { pass: false, reason: 'creator_sold', signals: earlySignals };
+    }
+    
     // Additional quality checks
     const marketCap = tokenData.usd_market_cap || 0;
     if (marketCap < 5000) {
@@ -638,7 +669,8 @@ class TradingBrain {
     
     // PASSED - This is a fast entry candidate
     const bundleInfo = tokenData.isBundled ? ` | Bundled: ${tokenData.sniperCount} snipers` : '';
-    console.log(`[FAST-ENTRY] ${tokenData.symbol} PASSED | Age: ${ageMinutes.toFixed(1)}min | BC: ${bcProgress.toFixed(0)}% | Velocity: ${velocityAnalysis.velocity.toFixed(1)}%/min${bundleInfo}`);
+    const uniqueBuysInfo = uniqueBuysPerMinute > 0 ? ` | UniqBuys: ${uniqueBuysPerMinute.toFixed(0)}/min` : '';
+    console.log(`[FAST-ENTRY] ${tokenData.symbol} PASSED | Age: ${ageMinutes.toFixed(1)}min | BC: ${bcProgress.toFixed(0)}% | Vel: ${velocityAnalysis.velocity.toFixed(1)}%/min${bundleInfo}${uniqueBuysInfo}`);
     
     return { 
       pass: true, 
@@ -648,7 +680,7 @@ class TradingBrain {
     };
   }
 
-  // Calculate early pump.fun signals for learning
+  // Calculate early pump.fun signals for learning - ENHANCED with high-edge signals
   calculateEarlySignals(tokenData, velocityAnalysis = null) {
     const ageMinutes = tokenData.ageMinutes || 
       ((Date.now() - new Date(tokenData.created_timestamp).getTime()) / 60000);
@@ -658,30 +690,64 @@ class TradingBrain {
     const buys = tokenData.buys24h || Math.floor(txns * 0.6); // Estimate 60% are buys
     const buyersPerMinute = ageMinutes > 0 ? buys / Math.max(1, ageMinutes) : 0;
     
+    // NEW: Transactions per minute
+    const txnsPerMinute = ageMinutes > 0 ? txns / Math.max(1, ageMinutes) : 0;
+    
     // Estimate new vs repeat buyers (rough approximation)
     const uniqueWallets = tokenData.uniqueWallets24h || tokenData.uniqueWallets || 0;
     const newBuyers = uniqueWallets;
     const repeatBuyers = Math.max(0, buys - uniqueWallets);
     
-    // Average buy size
+    // NEW: Unique buys per minute (strongest early signal)
+    const uniqueBuysPerMinute = ageMinutes > 0 ? uniqueWallets / Math.max(1, ageMinutes) : 0;
+    
+    // NEW: Unique buyer growth rate (holders per minute)
+    const holders = tokenData.holder_count || tokenData.holders || 0;
+    const uniqueBuyerGrowthRate = ageMinutes > 0 ? holders / Math.max(1, ageMinutes) : 0;
+    
+    // Average buy size in USD
     const buyVolume = tokenData.buyVolume24h || tokenData.volume24h * 0.6 || 0;
     const avgBuySize = buys > 0 ? buyVolume / buys : 0;
+    
+    // NEW: Average buy size in SOL (estimate)
+    const solPrice = 200; // Rough estimate, will be updated by helius
+    const avgBuySizeSol = avgBuySize / solPrice;
+    
+    // NEW: Avg buy size trend (estimate from buy pressure)
+    const buyPressure = tokenData.buyPressure || 50;
+    const avgBuySizeTrend = buyPressure > 60 ? 'increasing' : 
+                           buyPressure < 40 ? 'decreasing' : 'stable';
     
     // Bonding curve velocity
     const bcVelocity = velocityAnalysis?.velocity || 0;
     
+    // NEW: Creator signals (from tokenData if available)
+    const creatorBoughtEarly = tokenData.creatorBoughtEarly || false;
+    const creatorSoldEarly = tokenData.creatorSoldEarly || false;
+    
     return {
       tokenAge: ageMinutes,
       buyersPerMinute,
+      txnsPerMinute,
+      uniqueBuysPerMinute,
+      uniqueBuyerGrowthRate,
       newBuyers,
       repeatBuyers,
       avgBuySize,
+      avgBuySizeSol,
+      avgBuySizeTrend,
+      creatorBoughtEarly,
+      creatorSoldEarly,
       bondingCurveProgress: tokenData.bondingCurveProgress || 
         bondingCurve.calculateProgress(tokenData.virtual_sol_reserves || 0),
       bondingCurveVelocity: bcVelocity,
       isNearGraduation: velocityAnalysis?.progress >= 80,
       isGraduationFrenzy: velocityAnalysis?.isGraduationFrenzy || false,
-      velocityClass: velocityAnalysis?.velocityClass || 'unknown'
+      velocityClass: velocityAnalysis?.velocityClass || 'unknown',
+      // Quality flags
+      isHighActivity: txnsPerMinute > 10,
+      isOrganicGrowth: uniqueBuysPerMinute > 12,
+      hasStrongMomentum: bcVelocity > 1.8
     };
   }
 
@@ -1039,8 +1105,10 @@ class TradingBrain {
       maxDown: 0,
       maxUpTime: null,
       maxDownTime: null,
-      // Per-window learning flags - Added 1min for faster learning
+      // Per-window learning flags - EXPANDED with 0.5min and 2min
+      learned_0_5min: false,
       learned_1min: false,
+      learned_2min: false,
       learned_3min: false,
       learned_5min: false,
       learned_10min: false,
@@ -1088,6 +1156,14 @@ class TradingBrain {
         bondingCurveProgress: tokenData.bondingCurveProgress || 0,
         bondingCurveVelocity: tokenData.bondingCurveVelocity || 0,
         tokenAge: tokenData.ageMinutes || 0,
+        // NEW: High-edge early signals
+        txnsPerMinute: tokenData.txnsPerMinute || 0,
+        uniqueBuysPerMinute: tokenData.uniqueBuysPerMinute || 0,
+        uniqueBuyerGrowthRate: tokenData.uniqueBuyerGrowthRate || 0,
+        avgBuySizeSol: tokenData.avgBuySizeSol || 0,
+        avgBuySizeTrend: tokenData.avgBuySizeTrend || 'stable',
+        creatorBoughtEarly: tokenData.creatorBoughtEarly || false,
+        creatorSoldEarly: tokenData.creatorSoldEarly || false,
         // Sniper/Bundle data
         sniperCount: tokenData.sniperCount || 0,
         isBundled: tokenData.isBundled || false,
@@ -1155,7 +1231,7 @@ class TradingBrain {
           // If we see a significant move (>4%), learn from it immediately
           if (volatility >= 4 && !tracked.microLearned) {
             tracked.microLearned = true;
-            const microOutcome = this.classifyVolatility(tracked.maxUp, tracked.maxDown);
+            const microOutcome = this.classifyVolatility(tracked.maxUp, tracked.maxDown, tracked.tokenData?.marketCap);
             
             console.log(`[MICRO-LEARN] ${tracked.symbol}: ${microOutcome.bucket} at ${ageMinutes.toFixed(1)}min | maxUp=${tracked.maxUp.toFixed(1)}% maxDown=${tracked.maxDown.toFixed(1)}%`);
             
@@ -1212,13 +1288,15 @@ class TradingBrain {
         tracked.currentPnl = pnlPercent;
       }
       
-      // LEARN AT EACH WINDOW (3, 5, 10 minutes) - generates 3 samples per token
+      // LEARN AT EACH WINDOW (0.5, 1, 2, 3, 5, 10 minutes) - generates 6 samples per token
       for (const windowMinutes of this.outcomeWindows) {
-        if (ageMinutes >= windowMinutes && !tracked[`learned_${windowMinutes}min`]) {
-          tracked[`learned_${windowMinutes}min`] = true;
+        // Handle decimal windows (0.5 -> 0_5)
+        const windowKey = `learned_${String(windowMinutes).replace('.', '_')}min`;
+        if (ageMinutes >= windowMinutes && !tracked[windowKey]) {
+          tracked[windowKey] = true;
           
           // Get volatility bucket based on maxUp/maxDown at this window
-          const volatilityOutcome = this.classifyVolatility(tracked.maxUp || 0, tracked.maxDown || 0);
+          const volatilityOutcome = this.classifyVolatility(tracked.maxUp || 0, tracked.maxDown || 0, tracked.tokenData?.marketCap);
           
           console.log(`[LEARN-${windowMinutes}min] ${tracked.symbol}: maxUp=${(tracked.maxUp || 0).toFixed(1)}% maxDown=${(tracked.maxDown || 0).toFixed(1)}% => ${volatilityOutcome.bucket} (${volatilityOutcome.direction})`);
           
@@ -1266,7 +1344,7 @@ class TradingBrain {
         tracked.finalOutcomeDecided = true;
         toRemove.push(mint);
         
-        const finalOutcome = this.classifyVolatility(tracked.maxUp || 0, tracked.maxDown || 0);
+        const finalOutcome = this.classifyVolatility(tracked.maxUp || 0, tracked.maxDown || 0, tracked.tokenData?.marketCap);
         console.log(`[FINAL] ${tracked.symbol}: ${finalOutcome.bucket} | maxUp=${(tracked.maxUp || 0).toFixed(1)}% maxDown=${(tracked.maxDown || 0).toFixed(1)}% | AI accuracy: ${learner.performance.volatilityAccuracy.toFixed(1)}%`);
       }
     }
@@ -1287,28 +1365,44 @@ class TradingBrain {
     }
   }
 
-  // Classify volatility into buckets - LOWERED THRESHOLDS for memecoins
-  classifyVolatility(maxUp, maxDown) {
+  // Classify volatility into buckets - ADAPTIVE BY MARKET CAP
+  // Small caps need tighter thresholds, large caps need looser
+  classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     const direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     
+    // ADAPTIVE THRESHOLDS by market cap
+    let weakThreshold, strongThreshold;
+    if (marketCap < 50000) {
+      // Small caps (<$50k): tighter thresholds ±6% weak, ±10% strong
+      weakThreshold = 6;
+      strongThreshold = 10;
+    } else if (marketCap <= 200000) {
+      // Mid caps ($50k-$200k): standard thresholds ±8% weak, ±12% strong
+      weakThreshold = 8;
+      strongThreshold = 12;
+    } else {
+      // Large caps (>$200k): looser thresholds ±10% weak, ±15% strong
+      weakThreshold = 10;
+      strongThreshold = 15;
+    }
+    
     let bucket;
-    // LOWERED: 8% thresholds instead of 15%/7% - most good pumps are 8-12%
-    if (maxUp >= 12) {
+    if (maxUp >= strongThreshold) {
       bucket = 'strong_pump';
-    } else if (maxUp >= 8) {
+    } else if (maxUp >= weakThreshold) {
       bucket = 'weak_pump';
-    } else if (maxDown <= -12) {
+    } else if (maxDown <= -strongThreshold) {
       bucket = 'strong_dump';
-    } else if (maxDown <= -8) {
+    } else if (maxDown <= -weakThreshold) {
       bucket = 'weak_dump';
     } else if (maxUp >= 4 || maxDown <= -4) {
-      bucket = 'micro_move'; // 4-8% moves - still tradeable
+      bucket = 'micro_move'; // 4%+ moves - still tradeable
     } else {
       bucket = 'chop'; // maxUp < 4% AND maxDown > -4%
     }
     
-    return { bucket, direction, volatilityScore, maxUp, maxDown };
+    return { bucket, direction, volatilityScore, maxUp, maxDown, marketCap, weakThreshold, strongThreshold };
   }
 
   // Update stats based on volatility bucket

@@ -30,12 +30,20 @@ class SelfLearner {
       bondingCurveVelocity: 1.0,
       isNearGraduation: 1.0,
       tokenAge: 1.0,
-      // NEW: Early pump.fun signals
+      // Early pump.fun signals
       buyersPerMinute: 1.0,
       newBuyers: 1.0,
       repeatBuyers: 1.0,
       avgBuySize: 1.0,
-      topHolderPercent: 1.0
+      topHolderPercent: 1.0,
+      // NEW: High-edge early signals (2025 meta)
+      txnsPerMinute: 1.0,
+      uniqueBuysPerMinute: 1.2, // Start with higher weight - strongest signal
+      uniqueBuyerGrowthRate: 1.0,
+      avgBuySizeSol: 1.0,
+      avgBuySizeTrend: 1.0,
+      creatorBoughtEarly: 1.0,
+      creatorSoldEarly: 1.0
     };
     
     // NO HARD THRESHOLDS - use soft penalties instead
@@ -135,15 +143,35 @@ class SelfLearner {
     return { volatilityBucket, direction, volatilityScore, predictedVolatility };
   }
 
-  // Get volatility bucket - LOWERED THRESHOLDS for memecoins
-  getVolatilityBucket(volatilityScore) {
-    if (volatilityScore < 4) return 'dead';        // <4% = dead
-    if (volatilityScore < 8) return 'tradeable';   // 4-8% = tradeable (was 5-10%)
-    if (volatilityScore < 15) return 'high_alpha'; // 8-15% = high alpha (was 10-20%)
-    return 'extreme';                               // 15%+ = extreme (was 20%+)
+  // Get volatility bucket - ADAPTIVE BY MARKET CAP
+  getVolatilityBucket(volatilityScore, marketCap = 100000) {
+    // Adaptive thresholds by market cap
+    let deadThreshold, tradeableThreshold, highAlphaThreshold;
+    
+    if (marketCap < 50000) {
+      // Small caps: tighter thresholds
+      deadThreshold = 3;
+      tradeableThreshold = 6;
+      highAlphaThreshold = 10;
+    } else if (marketCap <= 200000) {
+      // Mid caps: standard thresholds
+      deadThreshold = 4;
+      tradeableThreshold = 8;
+      highAlphaThreshold = 15;
+    } else {
+      // Large caps: looser thresholds
+      deadThreshold = 5;
+      tradeableThreshold = 10;
+      highAlphaThreshold = 18;
+    }
+    
+    if (volatilityScore < deadThreshold) return 'dead';
+    if (volatilityScore < tradeableThreshold) return 'tradeable';
+    if (volatilityScore < highAlphaThreshold) return 'high_alpha';
+    return 'extreme';
   }
 
-  // Predict volatility (not direction)
+  // Predict volatility (not direction) - ENHANCED with non-linear boosts
   predictVolatility(signals) {
     let score = 0;
     
@@ -178,14 +206,34 @@ class SelfLearner {
     if (bpm > 10) score += 12 * this.weights.buyersPerMinute;
     else if (bpm > 5) score += 6 * this.weights.buyersPerMinute;
     
+    // NEW: Unique buys per minute - strongest early signal
+    const ubpm = signals.uniqueBuysPerMinute || 0;
+    if (ubpm > 20) score += 15; // Non-linear boost for very high unique buys
+    else if (ubpm > 12) score += 10 * this.weights.buyersPerMinute;
+    else if (ubpm > 5) score += 5 * this.weights.buyersPerMinute;
+    
+    // NEW: Txns per minute
+    const tpm = signals.txnsPerMinute || 0;
+    if (tpm > 15) score += 8;
+    else if (tpm > 8) score += 4;
+    
     // Low holder count = more volatile
     const holders = signals.holders || 0;
     if (holders < 50) score += 5 * this.weights.holders;
     
+    // NEW: Interaction boost - graduation zone + high velocity = multiplier
+    if (bcProgress >= 65 && bcProgress < 85 && bcVelocity > 2) {
+      score *= 1.4; // 40% boost for this powerful combo
+    }
+    
+    // NEW: Creator signals
+    if (signals.creatorSoldEarly) score *= 0.5; // Big penalty
+    if (signals.creatorBoughtEarly) score *= 1.1; // Small boost
+    
     // Apply soft penalties (reduce score, don't eliminate)
     score = this.applySoftPenalties(signals, score);
     
-    return Math.max(0, Math.min(30, score)); // Cap at 30% predicted volatility
+    return Math.max(0, Math.min(35, score)); // Cap at 35% predicted volatility (raised from 30)
   }
 
   // Apply soft penalties instead of hard filters
@@ -390,6 +438,7 @@ class SelfLearner {
       const mcap = tokenData.marketCap || 0;
       const velocity = tokenData.bondingCurveVelocity || 0;
       const velocityToMcapRatio = mcap > 0 ? (velocity / (mcap / 1000)) : 0; // Velocity per $1k mcap
+      const bcVelocity = velocity;
       
       const trainingRecord = {
         // Timestamp
@@ -413,6 +462,15 @@ class SelfLearner {
         txns24h: tokenData.txns24h || 0,
         volumeToMcap: tokenData.volumeToMcap || 0,
         
+        // NEW: High-edge early signals
+        txnsPerMinute: tokenData.txnsPerMinute || 0,
+        uniqueBuysPerMinute: tokenData.uniqueBuysPerMinute || 0,
+        uniqueBuyerGrowthRate: tokenData.uniqueBuyerGrowthRate || 0,
+        avgBuySizeSol: tokenData.avgBuySizeSol || 0,
+        avgBuySizeTrend: tokenData.avgBuySizeTrend || 'stable',
+        creatorBoughtEarly: tokenData.creatorBoughtEarly ? 1 : 0,
+        creatorSoldEarly: tokenData.creatorSoldEarly ? 1 : 0,
+        
         // INPUT SIGNALS - Price Changes
         priceChange1h: tokenData.priceChange1h || 0,
         priceChange24h: tokenData.priceChange24h || 0,
@@ -430,6 +488,7 @@ class SelfLearner {
         velocity_to_mcap_ratio: velocityToMcapRatio,
         buyers_per_holder: tokenData.holders > 0 ? (tokenData.buyersPerMinute || 0) / tokenData.holders : 0,
         volume_per_holder: tokenData.holders > 0 ? (tokenData.volume24h || 0) / tokenData.holders : 0,
+        unique_buys_to_velocity: bcVelocity > 0 ? (tokenData.uniqueBuysPerMinute || 0) / bcVelocity : 0,
         
         // LABELS - What actually happened
         maxUp: tracked.maxUp || 0,

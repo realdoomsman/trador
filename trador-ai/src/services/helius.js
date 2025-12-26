@@ -791,6 +791,81 @@ class HeliusService {
     }
   }
 
+  // HIGH-EDGE EARLY SIGNALS - Get real-time trading activity for sub-2min detection
+  // These are the strongest predictors of early pumps in 2025 memecoin meta
+  async getEarlySignals(mintAddress, tokenAge = 2) {
+    try {
+      // Get recent trades from Birdeye
+      const trades = await this.getBirdeyeRecentTrades(mintAddress, 100);
+      if (!trades || trades.totalTrades === 0) {
+        return { analyzed: false, reason: 'no_trades' };
+      }
+      
+      const now = Date.now();
+      const oneMinAgo = now - 60000;
+      const thirtySecAgo = now - 30000;
+      
+      // Get token overview for holder growth
+      const overview = await this.getBirdeyeTokenOverview(mintAddress);
+      
+      // Calculate txns per minute (from recent activity)
+      const recentTxns = trades.totalTrades;
+      const txnsPerMinute = tokenAge > 0 ? recentTxns / Math.max(1, tokenAge) : recentTxns;
+      
+      // Unique buys per minute
+      const uniqueBuysPerMinute = tokenAge > 0 ? trades.uniqueBuyers / Math.max(1, tokenAge) : trades.uniqueBuyers;
+      
+      // Unique buyer growth rate (new holders per minute)
+      const holders = overview?.holder || 0;
+      const uniqueBuyerGrowthRate = tokenAge > 0 ? holders / Math.max(1, tokenAge) : 0;
+      
+      // Average buy size in SOL (estimate from USD / SOL price)
+      const solPrice = await this.getSolPrice() || 200;
+      const avgBuySizeUsd = trades.avgBuySize || 0;
+      const avgBuySizeSol = avgBuySizeUsd / solPrice;
+      
+      // Avg buy size trend - compare recent vs earlier
+      // If we have trade data, estimate trend from buy ratio changes
+      const avgBuySizeTrend = trades.isBuyHeavy ? 'increasing' : 
+                              trades.isSellHeavy ? 'decreasing' : 'stable';
+      
+      // Creator activity detection (from security data)
+      const security = await this.getBirdeyeTokenSecurity(mintAddress);
+      const creatorBoughtEarly = security?.creatorPercentage > 0 && security?.creatorPercentage < 10; // Green: creator has small stake
+      const creatorSoldEarly = security?.creatorPercentage === 0 && security?.creatorBalance === 0; // Red: creator dumped
+      
+      console.log(`[EARLY-SIGNALS] ${mintAddress.slice(0, 8)}: txns/min=${txnsPerMinute.toFixed(1)}, uniqueBuys/min=${uniqueBuysPerMinute.toFixed(1)}, avgBuy=${avgBuySizeSol.toFixed(2)}SOL, trend=${avgBuySizeTrend}`);
+      
+      return {
+        analyzed: true,
+        // Core signals
+        txnsPerMinute,
+        uniqueBuysPerMinute,
+        uniqueBuyerGrowthRate,
+        avgBuySizeSol,
+        avgBuySizeUsd,
+        avgBuySizeTrend,
+        // Creator signals
+        creatorBoughtEarly,
+        creatorSoldEarly,
+        creatorPercentage: security?.creatorPercentage || 0,
+        // Derived signals
+        buyRatio: trades.buyRatio || 50,
+        uniqueBuyers: trades.uniqueBuyers || 0,
+        uniqueSellers: trades.uniqueSellers || 0,
+        whaleBuys: trades.whaleBuys || 0,
+        // Quality flags
+        isHighActivity: txnsPerMinute > 10,
+        isOrganicGrowth: uniqueBuysPerMinute > 12,
+        hasWhaleInterest: trades.whaleBuys > 2,
+        isBuyHeavy: trades.isBuyHeavy || false
+      };
+    } catch (err) {
+      console.error(`[EARLY-SIGNALS] Failed for ${mintAddress}:`, err.message);
+      return { analyzed: false, reason: err.message };
+    }
+  }
+
   // Get recent trades for a token
   async getBirdeyeRecentTrades(mintAddress, limit = 50) {
     if (!this.birdeyeKey) return null;
