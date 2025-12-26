@@ -875,12 +875,12 @@ class TradingBrain {
 
         const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
         
-        // Classify outcome
+        // Classify outcome (±5% threshold for 10-min window)
         let outcome;
-        if (pnlPercent >= 20) {
+        if (pnlPercent >= 5) {
           outcome = 'pump';
           this.state.stats.pumps++;
-        } else if (pnlPercent <= -20) {
+        } else if (pnlPercent <= -5) {
           outcome = 'dump';
           this.state.stats.dumps++;
         } else {
