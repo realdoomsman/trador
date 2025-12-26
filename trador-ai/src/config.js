@@ -82,23 +82,29 @@ export default {
   fastPollInterval: 3000,       // 3 seconds - fast poll for new pump.fun tokens
   priceUpdateInterval: 5000,    // 5 seconds - track positions faster
   analysisInterval: 15000,
-  outcomeCheckInterval: 30000,  // 30 seconds - check outcomes more frequently
+  outcomeCheckInterval: 15000,  // 15 seconds - check outcomes MUCH more frequently (was 30s)
   
   // FIXED: Multiple outcome check windows (in minutes)
   // EXPANDED: Added 0.5min (30s) and 2min for faster learning
-  outcomeWindows: [0.5, 1, 2, 3, 5, 10],   // Check at 30s, 1, 2, 3, 5, and 10 minutes
-  pumpThreshold: 8,             // 8% = pump (lowered from 10% - most good pumps are 8-12%)
-  microPumpThreshold: 4,        // 4-8% = micro-pump
-  dumpThreshold: -8,            // -8% = dump (lowered from -10%)
+  outcomeWindows: [0.5, 1, 2, 3, 5, 10, 15],   // Check at 30s, 1, 2, 3, 5, 10, 15 minutes
   
-  // MFE/MAE thresholds - LOWERED for faster detection
-  mfePumpThreshold: 8,          // 8% MFE at any point = PUMP (was 15%)
-  maeDumpThreshold: -8,         // 8% MAE before pump = DUMP (was -10%)
+  // SLASHED THRESHOLDS - Force detection of real pumps
+  pumpThreshold: 6,             // 6% = pump (was 8% - too high, missing +300% moves)
+  microPumpThreshold: 3,        // 3-6% = micro-pump (was 4%)
+  dumpThreshold: -6,            // -6% = dump (was -8%)
   
-  // Token tracking
-  maxTrackedTokens: 800,        // Increased from 300 to 800
-  maxTrackTimeMinutes: 10,      // Max tracking time
-  tokensPerScan: 150,           // Increased from 100 to 150 for better coverage
+  // MFE/MAE thresholds - SLASHED for detection
+  mfePumpThreshold: 6,          // 6% MFE at any point = PUMP (was 8%)
+  maeDumpThreshold: -6,         // 6% MAE before pump = DUMP (was -8%)
+  
+  // EXTREME MOVE thresholds (new)
+  extremePumpThreshold: 20,     // 20%+ = extreme pump (common in current market)
+  extremeDumpThreshold: -20,    // -20% = extreme dump
+  
+  // Token tracking - MASSIVELY INCREASED
+  maxTrackedTokens: 2500,       // Increased from 800 to 2500
+  maxTrackTimeMinutes: 20,      // Extended from 10 to 20 min for longer pumps
+  tokensPerScan: 200,           // Increased from 150 to 200 for better coverage
   
   // FIXED: Lower data requirements to start trading sooner
   minDataPointsForTraining: 20,

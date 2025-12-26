@@ -1022,6 +1022,98 @@ class HeliusService {
       return { analyzed: false, reason: err.message };
     }
   }
+
+  // DEXSCREENER TOP GAINERS - Auto-track any >20% mover
+  // Poll every 5 min to catch hot tokens we might have missed
+  async getDexScreenerTopGainers(minGainPercent = 20) {
+    try {
+      // Get Solana gainers from DexScreener
+      const res = await fetch('https://api.dexscreener.com/latest/dex/tokens/solana', {
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!res.ok) {
+        console.log(`[DEXSCREENER-GAINERS] Failed: ${res.status}`);
+        return [];
+      }
+      
+      const data = await res.json();
+      if (!data.pairs) return [];
+      
+      // Filter to gainers with >minGainPercent in last hour
+      const gainers = data.pairs.filter(pair => {
+        const priceChange1h = pair.priceChange?.h1 || 0;
+        const priceChange24h = pair.priceChange?.h24 || 0;
+        const volume = pair.volume?.h24 || 0;
+        const liquidity = pair.liquidity?.usd || 0;
+        
+        // Must have significant gain AND volume AND liquidity
+        return (priceChange1h >= minGainPercent || priceChange24h >= minGainPercent * 2) &&
+               volume > 10000 &&
+               liquidity > 5000;
+      });
+      
+      console.log(`[DEXSCREENER-GAINERS] Found ${gainers.length} tokens with >${minGainPercent}% gain`);
+      
+      return gainers.slice(0, 30).map(pair => ({
+        mint: pair.baseToken?.address || pair.pairAddress,
+        symbol: pair.baseToken?.symbol || 'UNKNOWN',
+        name: pair.baseToken?.name || 'Unknown Token',
+        usd_market_cap: pair.marketCap || pair.fdv || 0,
+        virtual_sol_reserves: pair.liquidity?.usd ? pair.liquidity.usd / 200 : 0,
+        holder_count: 100,
+        created_timestamp: new Date(pair.pairCreatedAt || Date.now()).toISOString(),
+        price: parseFloat(pair.priceUsd) || 0,
+        volume24h: pair.volume?.h24 || 0,
+        priceChange1h: pair.priceChange?.h1 || 0,
+        priceChange24h: pair.priceChange?.h24 || 0,
+        txns24h: (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0),
+        source: 'dexscreener-gainer',
+        isTopGainer: true,
+        gainPercent: Math.max(pair.priceChange?.h1 || 0, pair.priceChange?.h24 || 0)
+      }));
+    } catch (err) {
+      console.error(`[DEXSCREENER-GAINERS] Error: ${err.message}`);
+      return [];
+    }
+  }
+
+  // Get pump.fun specific top gainers
+  async getPumpFunTopGainers(minGainPercent = 20) {
+    try {
+      const res = await fetch('https://api.dexscreener.com/latest/dex/search?q=pump.fun', {
+        headers: { 'Accept': 'application/json' }
+      });
+      
+      if (!res.ok) return [];
+      
+      const data = await res.json();
+      if (!data.pairs) return [];
+      
+      // Filter to pump.fun gainers
+      const pumpFunGainers = data.pairs.filter(pair => {
+        const isPumpFun = pair.chainId === 'solana' && 
+          (pair.dexId === 'pumpfun' || pair.url?.includes('pump.fun'));
+        const priceChange1h = pair.priceChange?.h1 || 0;
+        const priceChange24h = pair.priceChange?.h24 || 0;
+        
+        return isPumpFun && (priceChange1h >= minGainPercent || priceChange24h >= minGainPercent * 2);
+      });
+      
+      console.log(`[PUMPFUN-GAINERS] Found ${pumpFunGainers.length} pump.fun tokens with >${minGainPercent}% gain`);
+      
+      return pumpFunGainers.slice(0, 20).map(pair => ({
+        ...this.formatDexScreenerToken(pair),
+        source: 'pumpfun-gainer',
+        isPumpFun: true,
+        isTopGainer: true,
+        gainPercent: Math.max(pair.priceChange?.h1 || 0, pair.priceChange?.h24 || 0)
+      }));
+    } catch (err) {
+      console.error(`[PUMPFUN-GAINERS] Error: ${err.message}`);
+      return [];
+    }
+  }
 }
 
 export default new HeliusService();

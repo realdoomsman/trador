@@ -586,13 +586,13 @@ class TradingBrain {
 
   // FAST ENTRY FILTER - For early pump.fun tokens (NO AI LATENCY)
   // Returns { pass: boolean, reason: string, signals: object }
-  // UPDATED: Age < 1.5min, BC 55-88%, velocity > 1.8, uniqueBuys >= 12
+  // LOOSENED: Age < 5min, BC 40-95%, velocity > 0.5, uniqueBuys >= 8
   passesFastEntryFilter(tokenData, deepAnalysis = null) {
     const ageMinutes = tokenData.ageMinutes || 
       ((Date.now() - new Date(tokenData.created_timestamp).getTime()) / 60000);
     
-    // Only for very early tokens (< 1.5 minutes old) - tightened from 2min
-    if (ageMinutes >= 1.5) {
+    // LOOSENED: Allow tokens up to 5 minutes old (was 1.5min)
+    if (ageMinutes >= 5) {
       return { pass: false, reason: 'too_old', signals: null };
     }
     
@@ -600,9 +600,9 @@ class TradingBrain {
     const bcProgress = tokenData.bondingCurveProgress || 
       bondingCurve.calculateProgress(tokenData.virtual_sol_reserves || 0);
     
-    // UPDATED: Must be in the 55-88% zone (widened from 30-75%)
-    // 55% = enough momentum, 88% = just before exit liquidity trap
-    if (bcProgress < 55 || bcProgress > 88) {
+    // LOOSENED: BC 40-95% (was 55-88%)
+    // 40% = early momentum, 95% = allow near-graduation
+    if (bcProgress < 40 || bcProgress > 95) {
       return { pass: false, reason: `bc_progress_${bcProgress.toFixed(0)}%`, signals: null };
     }
     
@@ -612,8 +612,8 @@ class TradingBrain {
       tokenData.virtual_sol_reserves || 0
     );
     
-    // UPDATED: Must have strong velocity > 1.8 (not just > 0)
-    if (velocityAnalysis.velocity <= 1.8) {
+    // LOOSENED: velocity > 0.5 (was 1.8)
+    if (velocityAnalysis.velocity <= 0.5) {
       return { pass: false, reason: `low_velocity_${velocityAnalysis.velocity.toFixed(1)}`, signals: null };
     }
     
@@ -634,17 +634,17 @@ class TradingBrain {
       return { pass: false, reason: `too_many_snipers_${tokenData.sniperCount}`, signals: null };
     }
     
-    // Check top holder concentration (no wallet > 15%)
-    let topHolderPercent = 0;
-    if (deepAnalysis?.holders?.top1Percent) {
-      topHolderPercent = deepAnalysis.holders.top1Percent;
-    } else if (tokenData.topHolderPercent) {
-      topHolderPercent = tokenData.topHolderPercent;
-    }
-    
-    if (topHolderPercent > 15) {
-      return { pass: false, reason: `top_holder_${topHolderPercent.toFixed(0)}%`, signals: null };
-    }
+    // TEMPORARILY DISABLED: Top holder check (was 15%)
+    // Let AI learn which holder concentrations perform best
+    // let topHolderPercent = 0;
+    // if (deepAnalysis?.holders?.top1Percent) {
+    //   topHolderPercent = deepAnalysis.holders.top1Percent;
+    // } else if (tokenData.topHolderPercent) {
+    //   topHolderPercent = tokenData.topHolderPercent;
+    // }
+    // if (topHolderPercent > 15) {
+    //   return { pass: false, reason: `top_holder_${topHolderPercent.toFixed(0)}%`, signals: null };
+    // }
     
     // Calculate early signals
     const earlySignals = this.calculateEarlySignals(tokenData, velocityAnalysis);
@@ -655,26 +655,27 @@ class TradingBrain {
       earlySignals.isBundled = tokenData.isBundled ? 1 : 0;
     }
     
-    // NEW: Check unique buys per minute >= 12 (strong organic growth signal)
+    // LOOSENED: Check unique buys per minute >= 8 (was 12)
     const uniqueBuysPerMinute = earlySignals.uniqueBuysPerMinute || tokenData.uniqueBuysPerMinute || 0;
-    if (uniqueBuysPerMinute < 12 && uniqueBuysPerMinute > 0) {
+    if (uniqueBuysPerMinute < 8 && uniqueBuysPerMinute > 0) {
       return { pass: false, reason: `low_unique_buys_${uniqueBuysPerMinute.toFixed(0)}`, signals: earlySignals };
     }
     
-    // NEW: Check avg buy size trend (prefer increasing)
-    const avgBuySizeTrend = earlySignals.avgBuySizeTrend || tokenData.avgBuySizeTrend || 'stable';
-    if (avgBuySizeTrend === 'decreasing') {
-      return { pass: false, reason: 'declining_buy_size', signals: earlySignals };
-    }
+    // TEMPORARILY DISABLED: Avg buy size trend check
+    // Let AI learn which trends perform best
+    // const avgBuySizeTrend = earlySignals.avgBuySizeTrend || tokenData.avgBuySizeTrend || 'stable';
+    // if (avgBuySizeTrend === 'decreasing') {
+    //   return { pass: false, reason: 'declining_buy_size', signals: earlySignals };
+    // }
     
-    // NEW: Red flag if creator sold early
+    // Keep creator sold check - this is a strong red flag
     if (tokenData.creatorSoldEarly || earlySignals.creatorSoldEarly) {
       return { pass: false, reason: 'creator_sold', signals: earlySignals };
     }
     
-    // Additional quality checks
+    // LOOSENED: Min mcap $3k (was $5k)
     const marketCap = tokenData.usd_market_cap || 0;
-    if (marketCap < 5000) {
+    if (marketCap < 3000) {
       return { pass: false, reason: 'mcap_too_low', signals: earlySignals };
     }
     
@@ -1400,23 +1401,30 @@ class TradingBrain {
   // Classify volatility into buckets - MFE-PRIMARY CLASSIFICATION
   // CRITICAL: If maxUp >= threshold at ANY point, it's a pump - even if price crashed back to 0%
   // This ensures the SelfLearner sees every historical peak as a success signal
+  // THRESHOLDS SLASHED: 3%/6%/10%/20% to catch real pumps like +300% KALShi
   classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     
-    // ADAPTIVE THRESHOLDS by market cap
-    let weakThreshold, strongThreshold;
+    // ADAPTIVE THRESHOLDS by market cap - SLASHED for detection
+    let microThreshold, weakThreshold, strongThreshold, extremeThreshold;
     if (marketCap < 50000) {
-      // Small caps (<$50k): tighter thresholds ±6% weak, ±10% strong
+      // Small caps (<$50k): tightest thresholds
+      microThreshold = 3;
       weakThreshold = 6;
       strongThreshold = 10;
+      extremeThreshold = 20;
     } else if (marketCap <= 200000) {
-      // Mid caps ($50k-$200k): standard thresholds ±8% weak, ±12% strong
+      // Mid caps ($50k-$200k): standard thresholds
+      microThreshold = 4;
       weakThreshold = 8;
       strongThreshold = 12;
+      extremeThreshold = 25;
     } else {
-      // Large caps (>$200k): looser thresholds ±10% weak, ±15% strong
+      // Large caps (>$200k): looser thresholds
+      microThreshold = 5;
       weakThreshold = 10;
       strongThreshold = 15;
+      extremeThreshold = 30;
     }
     
     let bucket;
@@ -1425,12 +1433,21 @@ class TradingBrain {
     // MFE-PRIMARY: Check maxUp FIRST - if it hit the threshold at ANY point, it's a pump
     // This is the key fix: a token that hit +15% then crashed to -5% is still a "strong_pump"
     // because we COULD have taken profit at the peak
-    if (maxUp >= strongThreshold) {
+    
+    // EXTREME PUMP: 20%+ at any point (common in current market - e.g., +300% KALShi)
+    if (maxUp >= extremeThreshold) {
+      bucket = 'extreme_pump';
+      direction = 'up';
+    } else if (maxUp >= strongThreshold) {
       bucket = 'strong_pump';
       direction = 'up';
     } else if (maxUp >= weakThreshold) {
       bucket = 'weak_pump';
       direction = 'up';
+    } else if (maxDown <= -extremeThreshold) {
+      // EXTREME DUMP: Only if it NEVER hit pump threshold
+      bucket = 'extreme_dump';
+      direction = 'down';
     } else if (maxDown <= -strongThreshold) {
       // Only classify as dump if it NEVER hit the pump threshold
       bucket = 'strong_dump';
@@ -1438,19 +1455,22 @@ class TradingBrain {
     } else if (maxDown <= -weakThreshold) {
       bucket = 'weak_dump';
       direction = 'down';
-    } else if (maxUp >= 4) {
-      // Micro-pump: hit 4%+ but not weak threshold
-      bucket = 'micro_move';
+    } else if (maxUp >= microThreshold) {
+      // Micro-pump: hit micro threshold but not weak threshold
+      bucket = 'micro_pump';
       direction = 'up';
-    } else if (maxDown <= -4) {
-      // Micro-dump: dropped 4%+ but never pumped
-      bucket = 'micro_move';
+    } else if (maxDown <= -microThreshold) {
+      // Micro-dump: dropped micro threshold but never pumped
+      bucket = 'micro_dump';
       direction = 'down';
     } else {
-      // True chop: never moved more than ±4%
+      // True chop: never moved more than micro threshold
       bucket = 'chop';
       direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     }
+    
+    // DEBUG: Log classification for every token
+    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% mcap=${(marketCap/1000).toFixed(0)}k => ${bucket} (thresholds: micro=${microThreshold}% weak=${weakThreshold}% strong=${strongThreshold}% extreme=${extremeThreshold}%)`);
     
     return { 
       bucket, 
@@ -1459,8 +1479,10 @@ class TradingBrain {
       maxUp, 
       maxDown, 
       marketCap, 
+      microThreshold,
       weakThreshold, 
       strongThreshold,
+      extremeThreshold,
       // NEW: Flag if this was a "retracement pump" (hit target then crashed)
       wasRetracementPump: maxUp >= weakThreshold && maxDown <= -weakThreshold
     };
@@ -1468,20 +1490,26 @@ class TradingBrain {
 
   // Update stats based on volatility bucket
   updateVolatilityStats(outcome) {
+    if (!this.state.stats.extreme_pumps) this.state.stats.extreme_pumps = 0;
     if (!this.state.stats.strong_pumps) this.state.stats.strong_pumps = 0;
     if (!this.state.stats.weak_pumps) this.state.stats.weak_pumps = 0;
-    if (!this.state.stats.micro_moves) this.state.stats.micro_moves = 0;
+    if (!this.state.stats.micro_pumps) this.state.stats.micro_pumps = 0;
+    if (!this.state.stats.micro_dumps) this.state.stats.micro_dumps = 0;
     if (!this.state.stats.chops) this.state.stats.chops = 0;
     if (!this.state.stats.weak_dumps) this.state.stats.weak_dumps = 0;
     if (!this.state.stats.strong_dumps) this.state.stats.strong_dumps = 0;
+    if (!this.state.stats.extreme_dumps) this.state.stats.extreme_dumps = 0;
     
     switch (outcome.bucket) {
+      case 'extreme_pump': this.state.stats.extreme_pumps++; this.state.stats.pumps++; break;
       case 'strong_pump': this.state.stats.strong_pumps++; this.state.stats.pumps++; break;
       case 'weak_pump': this.state.stats.weak_pumps++; this.state.stats.pumps++; break;
-      case 'micro_move': this.state.stats.micro_moves++; break; // Track micro moves separately
+      case 'micro_pump': this.state.stats.micro_pumps++; this.state.stats.pumps++; break;
+      case 'micro_dump': this.state.stats.micro_dumps++; this.state.stats.dumps++; break;
       case 'chop': this.state.stats.chops++; this.state.stats.neutral++; break;
       case 'weak_dump': this.state.stats.weak_dumps++; this.state.stats.dumps++; break;
       case 'strong_dump': this.state.stats.strong_dumps++; this.state.stats.dumps++; break;
+      case 'extreme_dump': this.state.stats.extreme_dumps++; this.state.stats.dumps++; break;
     }
   }
 
@@ -1533,8 +1561,10 @@ class TradingBrain {
     };
   }
         
-  // Get token price from multiple sources
+  // Get token price from multiple sources - WITH HEAVY DEBUG LOGGING
   async getTokenPrice(mint) {
+    const startTime = Date.now();
+    
     // Try Birdeye first
     try {
       const res = await fetch(`https://public-api.birdeye.so/defi/price?address=${mint}`, {
@@ -1546,11 +1576,13 @@ class TradingBrain {
       if (res.ok) {
         const data = await res.json();
         if (data.data?.value && data.data.value > 0) {
+          console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Birdeye: $${data.data.value.toFixed(10)} | ${Date.now() - startTime}ms`);
           return { price: data.data.value, source: 'birdeye' };
         }
       }
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Birdeye FAILED: ${res.status}`);
     } catch (err) {
-      // Try fallback
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Birdeye ERROR: ${err.message}`);
     }
     
     // Fallback to Jupiter
@@ -1559,11 +1591,13 @@ class TradingBrain {
       if (res.ok) {
         const data = await res.json();
         if (data.data?.[mint]?.price && data.data[mint].price > 0) {
+          console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Jupiter: $${data.data[mint].price.toFixed(10)} | ${Date.now() - startTime}ms`);
           return { price: data.data[mint].price, source: 'jupiter' };
         }
       }
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Jupiter FAILED: no price data`);
     } catch (err) {
-      // Try DexScreener
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | Jupiter ERROR: ${err.message}`);
     }
     
     // Fallback to DexScreener
@@ -1572,13 +1606,17 @@ class TradingBrain {
       if (res.ok) {
         const data = await res.json();
         if (data.pairs?.[0]?.priceUsd) {
-          return { price: parseFloat(data.pairs[0].priceUsd), source: 'dexscreener' };
+          const price = parseFloat(data.pairs[0].priceUsd);
+          console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | DexScreener: $${price.toFixed(10)} | ${Date.now() - startTime}ms`);
+          return { price, source: 'dexscreener' };
         }
       }
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | DexScreener FAILED: no pairs`);
     } catch (err) {
-      // All failed
+      console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | DexScreener ERROR: ${err.message}`);
     }
     
+    console.log(`[PRICE-DEBUG] ${mint.slice(0,8)} | ALL SOURCES FAILED | ${Date.now() - startTime}ms`);
     return null;
   }
 
