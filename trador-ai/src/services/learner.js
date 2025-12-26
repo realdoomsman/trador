@@ -19,254 +19,269 @@ class SelfLearner {
       isBuyHeavy: 1.0,
       hasWhaleInterest: 1.0,
       isLpBurned: 1.0,
-      // NEW: Bonding curve signals
+      // Bonding curve signals
       bondingCurveProgress: 1.0,
+      bondingCurveVelocity: 1.0,
       isNearGraduation: 1.0,
-      tokenAge: 1.0
+      tokenAge: 1.0,
+      // NEW: Early pump.fun signals
+      buyersPerMinute: 1.0,
+      newBuyers: 1.0,
+      repeatBuyers: 1.0,
+      avgBuySize: 1.0,
+      topHolderPercent: 1.0
     };
     
-    this.thresholds = {
-      // Dynamic thresholds - AI adjusts based on performance
-      minMarketCap: 20000,
-      maxMarketCap: 500000,
-      minLiquidity: 5,
-      minHolders: 20,
-      minBuyPressure: 50,
-      minScore: 60
+    // NO HARD THRESHOLDS - use soft penalties instead
+    this.softPenalties = {
+      marketCapTooLow: { threshold: 5000, penalty: 0.8 },
+      marketCapTooHigh: { threshold: 2000000, penalty: 0.9 },
+      liquidityTooLow: { threshold: 2, penalty: 0.7 },
+      holdersTooFew: { threshold: 10, penalty: 0.8 },
+      topHolderTooHigh: { threshold: 15, penalty: 0.85 }
     };
     
     this.performance = {
       totalPredictions: 0,
       correctPredictions: 0,
       accuracy: 0,
-      lastUpdate: null
+      lastUpdate: null,
+      // NEW: Volatility prediction stats
+      volatilityPredictions: 0,
+      volatilityAccuracy: 0,
+      avgPredictedVolatility: 0,
+      avgActualVolatility: 0
     };
     
-    this.learningRate = 0.1; // How fast to adjust weights
-    this.minSamples = 10; // Min samples before adjusting (was 20)
+    // Dynamic learning rate - higher for early samples, decay later
+    this.baseLearningRate = 0.15;
+    this.minSamples = 5; // Start learning after just 5 samples
+  }
+
+  // Calculate dynamic learning rate
+  getLearningRate() {
+    const samples = this.performance.totalPredictions;
+    if (samples < 20) return this.baseLearningRate * 1.5; // Aggressive early learning
+    if (samples < 50) return this.baseLearningRate;
+    if (samples < 100) return this.baseLearningRate * 0.8;
+    return this.baseLearningRate * 0.5; // Slower learning once stable
   }
 
   async initialize() {
     const saved = await storage.loadLearnerState();
     if (saved) {
       this.weights = { ...this.weights, ...saved.weights };
-      this.thresholds = { ...this.thresholds, ...saved.thresholds };
+      this.softPenalties = { ...this.softPenalties, ...saved.softPenalties };
       this.performance = { ...this.performance, ...saved.performance };
-      console.log(`Learner loaded: ${this.performance.accuracy.toFixed(1)}% accuracy`);
+      console.log(`Learner loaded: ${this.performance.accuracy.toFixed(1)}% accuracy, ${this.performance.volatilityAccuracy.toFixed(1)}% volatility accuracy`);
     }
   }
 
   async save() {
     await storage.saveLearnerState({
       weights: this.weights,
-      thresholds: this.thresholds,
+      softPenalties: this.softPenalties,
       performance: this.performance
     });
   }
 
-  // Learn from a completed outcome
-  async learnFromOutcome(signals, outcome, pnlPercent) {
-    this.performance.totalPredictions++;
+  // NEW: Learn from volatility outcome (not just pump/dump)
+  async learnFromVolatility(signals, maxUp, maxDown, finalPnl, windowMinutes) {
+    const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
+    const volatilityBucket = this.getVolatilityBucket(volatilityScore);
+    const direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     
-    const wasPump = outcome === 'pump';
-    const predictedPump = this.predictPump(signals);
+    // Predict what we thought would happen
+    const predictedVolatility = this.predictVolatility(signals);
+    const predictedBucket = this.getVolatilityBucket(predictedVolatility);
     
-    if ((wasPump && predictedPump) || (!wasPump && !predictedPump)) {
+    this.performance.volatilityPredictions++;
+    
+    // Track accuracy
+    const bucketMatch = predictedBucket === volatilityBucket;
+    if (bucketMatch) {
       this.performance.correctPredictions++;
     }
     
-    this.performance.accuracy = this.performance.totalPredictions > 0 
+    // Update running averages
+    this.performance.avgPredictedVolatility = 
+      (this.performance.avgPredictedVolatility * (this.performance.volatilityPredictions - 1) + predictedVolatility) / 
+      this.performance.volatilityPredictions;
+    this.performance.avgActualVolatility = 
+      (this.performance.avgActualVolatility * (this.performance.volatilityPredictions - 1) + volatilityScore) / 
+      this.performance.volatilityPredictions;
+    
+    this.performance.volatilityAccuracy = this.performance.totalPredictions > 0 
       ? (this.performance.correctPredictions / this.performance.totalPredictions) * 100 
       : 0;
-
-    // Only adjust weights after enough samples
-    if (this.performance.totalPredictions >= this.minSamples) {
-      await this.adjustWeights(signals, wasPump, pnlPercent);
-      await this.adjustThresholds(signals, wasPump);
+    
+    // Adjust weights based on volatility, not direction
+    if (this.performance.volatilityPredictions >= this.minSamples) {
+      await this.adjustWeightsForVolatility(signals, volatilityScore, predictedVolatility, windowMinutes);
     }
-
+    
+    this.performance.totalPredictions++;
+    this.performance.accuracy = this.performance.volatilityAccuracy;
     this.performance.lastUpdate = Date.now();
+    
     await this.save();
+    
+    return { volatilityBucket, direction, volatilityScore, predictedVolatility };
   }
 
-  // Predict if token will pump based on current weights
-  predictPump(signals) {
-    const score = this.calculateWeightedScore(signals);
-    return score >= this.thresholds.minScore;
+  // Get volatility bucket
+  getVolatilityBucket(volatilityScore) {
+    if (volatilityScore < 5) return 'dead';
+    if (volatilityScore < 10) return 'tradeable';
+    if (volatilityScore < 20) return 'high_alpha';
+    return 'extreme';
   }
 
-  // Calculate weighted score using learned weights
-  calculateWeightedScore(signals) {
-    let score = 50;
-    let totalWeight = 0;
-
-    // Market cap
-    const mcap = signals.marketCap || 0;
-    if (mcap >= this.thresholds.minMarketCap && mcap <= this.thresholds.maxMarketCap) {
-      score += 10 * this.weights.marketCap;
-    } else if (mcap < this.thresholds.minMarketCap * 0.5 || mcap > this.thresholds.maxMarketCap * 2) {
-      score -= 10 * this.weights.marketCap;
-    }
-    totalWeight += this.weights.marketCap;
-
-    // Liquidity
-    const liq = signals.liquidity || 0;
-    if (liq >= this.thresholds.minLiquidity) {
-      score += 10 * this.weights.liquidity;
-    } else {
-      score -= 10 * this.weights.liquidity;
-    }
-    totalWeight += this.weights.liquidity;
-
-    // Buy pressure
-    const bp = signals.buyPressure || 50;
-    if (bp >= this.thresholds.minBuyPressure) {
-      score += ((bp - 50) / 5) * this.weights.buyPressure;
-    } else {
-      score -= ((50 - bp) / 5) * this.weights.buyPressure;
-    }
-    totalWeight += this.weights.buyPressure;
-
-    // Holders
-    const holders = signals.holders || 0;
-    if (holders >= this.thresholds.minHolders) {
-      score += 5 * this.weights.holders;
-    } else {
-      score -= 5 * this.weights.holders;
-    }
-    totalWeight += this.weights.holders;
-
-    // Volume to mcap ratio
-    const vtm = signals.volumeToMcap || 0;
-    if (vtm > 0.3) score += 10 * this.weights.volumeToMcap;
-    else if (vtm > 0.1) score += 5 * this.weights.volumeToMcap;
-    totalWeight += this.weights.volumeToMcap;
-
-    // Price momentum
-    const pc1h = signals.priceChange1h || 0;
-    if (pc1h > 5 && pc1h < 50) score += 5 * this.weights.priceChange1h;
-    else if (pc1h > 100) score -= 5 * this.weights.priceChange1h;
-    else if (pc1h < -20) score -= 10 * this.weights.priceChange1h;
-    totalWeight += this.weights.priceChange1h;
-
-    // Distribution score
-    const dist = signals.distributionScore || 50;
-    if (dist > 60) score += 5 * this.weights.distributionScore;
-    else if (dist < 30) score -= 10 * this.weights.distributionScore;
-    totalWeight += this.weights.distributionScore;
-
-    // Whale risk
-    const whaleP = signals.whalePercent || 0;
-    if (whaleP > 50) score -= 10 * this.weights.whalePercent;
-    else if (whaleP < 20) score += 5 * this.weights.whalePercent;
-    totalWeight += this.weights.whalePercent;
-
-    // Buy heavy
-    if (signals.isBuyHeavy) score += 5 * this.weights.isBuyHeavy;
-    totalWeight += this.weights.isBuyHeavy;
-
-    // Whale interest
-    if (signals.hasWhaleInterest) score += 5 * this.weights.hasWhaleInterest;
-    totalWeight += this.weights.hasWhaleInterest;
-
-    // LP burned
-    if (signals.isLpBurned) score += 5 * this.weights.isLpBurned;
-    totalWeight += this.weights.isLpBurned;
-
-    // NEW: Bonding curve progress (75-85% = graduation frenzy zone)
+  // Predict volatility (not direction)
+  predictVolatility(signals) {
+    let score = 0;
+    
+    // Early tokens = more volatile
+    const age = signals.tokenAge || signals.ageMinutes || 60;
+    if (age < 2) score += 15 * this.weights.tokenAge;
+    else if (age < 5) score += 10 * this.weights.tokenAge;
+    else if (age < 15) score += 5 * this.weights.tokenAge;
+    
+    // Bonding curve progress - graduation zone is volatile
     const bcProgress = signals.bondingCurveProgress || 0;
-    if (bcProgress >= 75 && bcProgress < 85) {
-      score += 15 * this.weights.bondingCurveProgress; // Graduation frenzy!
-    } else if (bcProgress >= 60 && bcProgress < 75) {
-      score += 8 * this.weights.bondingCurveProgress;
-    } else if (bcProgress < 20) {
-      score += 3 * this.weights.bondingCurveProgress; // Very early, risky but potential
+    if (bcProgress >= 60 && bcProgress < 85) {
+      score += 12 * this.weights.bondingCurveProgress;
     }
-    totalWeight += this.weights.bondingCurveProgress;
-
-    // Token age (newer = more volatile = higher potential)
-    const ageMinutes = signals.tokenAge || signals.ageMinutes || 60;
-    if (ageMinutes < 5) {
-      score += 10 * this.weights.tokenAge; // Brand new
-    } else if (ageMinutes < 15) {
-      score += 5 * this.weights.tokenAge;
-    } else if (ageMinutes > 60) {
-      score -= 5 * this.weights.tokenAge; // Old token, less likely to pump
-    }
-    totalWeight += this.weights.tokenAge;
-
-    // Normalize
-    return Math.max(0, Math.min(100, score));
-  }
-
-
-  // Adjust weights based on outcome
-  async adjustWeights(signals, wasPump, pnlPercent) {
-    const signalMap = {
-      marketCap: this.evaluateMarketCap(signals.marketCap),
-      liquidity: signals.liquidity >= this.thresholds.minLiquidity ? 1 : -1,
-      buyPressure: signals.buyPressure > 50 ? 1 : -1,
-      holders: signals.holders >= this.thresholds.minHolders ? 1 : -1,
-      volumeToMcap: signals.volumeToMcap > 0.1 ? 1 : -1,
-      priceChange1h: signals.priceChange1h > 0 && signals.priceChange1h < 50 ? 1 : -1,
-      distributionScore: signals.distributionScore > 50 ? 1 : -1,
-      whalePercent: signals.whalePercent < 30 ? 1 : -1,
-      isBuyHeavy: signals.isBuyHeavy ? 1 : 0,
-      hasWhaleInterest: signals.hasWhaleInterest ? 1 : 0,
-      isLpBurned: signals.isLpBurned ? 1 : 0
-    };
-
-    for (const [signal, direction] of Object.entries(signalMap)) {
-      if (direction === 0) continue;
-      
-      // If signal direction matched outcome, increase weight
-      // If signal direction didn't match outcome, decrease weight
-      const signalPredictedPump = direction > 0;
-      const wasCorrect = signalPredictedPump === wasPump;
-      
-      const adjustment = wasCorrect 
-        ? this.learningRate * Math.abs(pnlPercent) / 100
-        : -this.learningRate * Math.abs(pnlPercent) / 100;
-      
-      this.weights[signal] = Math.max(0.1, Math.min(3.0, this.weights[signal] + adjustment));
-    }
-
-    console.log(`Weights adjusted. Top signals: ${this.getTopSignals().join(', ')}`);
-  }
-
-  evaluateMarketCap(mcap) {
-    if (mcap >= this.thresholds.minMarketCap && mcap <= this.thresholds.maxMarketCap) return 1;
-    return -1;
-  }
-
-  // Adjust thresholds based on what's working
-  async adjustThresholds(signals, wasPump) {
-    // If pump happened outside our thresholds, expand them
-    // If dump happened inside our thresholds, tighten them
     
+    // Bonding curve velocity - fast progress = volatile
+    const bcVelocity = signals.bondingCurveVelocity || 0;
+    if (bcVelocity > 2) score += 10 * this.weights.bondingCurveVelocity;
+    else if (bcVelocity > 0.5) score += 5 * this.weights.bondingCurveVelocity;
+    
+    // Buy pressure extremes = volatile
+    const bp = signals.buyPressure || 50;
+    if (bp > 70 || bp < 30) score += 8 * this.weights.buyPressure;
+    
+    // Volume to mcap ratio - high = volatile
+    const vtm = signals.volumeToMcap || 0;
+    if (vtm > 0.5) score += 10 * this.weights.volumeToMcap;
+    else if (vtm > 0.2) score += 5 * this.weights.volumeToMcap;
+    
+    // Buyers per minute - high activity = volatile
+    const bpm = signals.buyersPerMinute || 0;
+    if (bpm > 10) score += 12 * this.weights.buyersPerMinute;
+    else if (bpm > 5) score += 6 * this.weights.buyersPerMinute;
+    
+    // Low holder count = more volatile
+    const holders = signals.holders || 0;
+    if (holders < 50) score += 5 * this.weights.holders;
+    
+    // Apply soft penalties (reduce score, don't eliminate)
+    score = this.applySoftPenalties(signals, score);
+    
+    return Math.max(0, Math.min(30, score)); // Cap at 30% predicted volatility
+  }
+
+  // Apply soft penalties instead of hard filters
+  applySoftPenalties(signals, score) {
     const mcap = signals.marketCap || 0;
+    const liq = signals.liquidity || 0;
+    const holders = signals.holders || 0;
+    const topHolder = signals.topHolderPercent || signals.top1Percent || 0;
     
-    if (wasPump) {
-      // Expand thresholds to include this pump
-      if (mcap < this.thresholds.minMarketCap && mcap > 5000) {
-        this.thresholds.minMarketCap = Math.max(5000, mcap * 0.8);
-        console.log(`Lowered minMarketCap to ${this.thresholds.minMarketCap}`);
-      }
-      if (mcap > this.thresholds.maxMarketCap && mcap < 2000000) {
-        this.thresholds.maxMarketCap = Math.min(2000000, mcap * 1.2);
-        console.log(`Raised maxMarketCap to ${this.thresholds.maxMarketCap}`);
-      }
+    if (mcap < this.softPenalties.marketCapTooLow.threshold) {
+      score *= this.softPenalties.marketCapTooLow.penalty;
+    }
+    if (mcap > this.softPenalties.marketCapTooHigh.threshold) {
+      score *= this.softPenalties.marketCapTooHigh.penalty;
+    }
+    if (liq < this.softPenalties.liquidityTooLow.threshold) {
+      score *= this.softPenalties.liquidityTooLow.penalty;
+    }
+    if (holders < this.softPenalties.holdersTooFew.threshold) {
+      score *= this.softPenalties.holdersTooFew.penalty;
+    }
+    if (topHolder > this.softPenalties.topHolderTooHigh.threshold) {
+      score *= this.softPenalties.topHolderTooHigh.penalty;
+    }
+    
+    return score;
+  }
+
+  // Adjust weights based on volatility prediction error
+  async adjustWeightsForVolatility(signals, actualVolatility, predictedVolatility, windowMinutes) {
+    const error = actualVolatility - predictedVolatility;
+    const learningRate = this.getLearningRate();
+    
+    // Weight adjustment based on prediction error
+    // If we under-predicted volatility, increase weights of signals that were high
+    // If we over-predicted, decrease weights of signals that were high
+    
+    const signalContributions = {
+      tokenAge: this.getAgeContribution(signals.tokenAge || signals.ageMinutes),
+      bondingCurveProgress: this.getBCProgressContribution(signals.bondingCurveProgress),
+      bondingCurveVelocity: signals.bondingCurveVelocity > 1 ? 1 : 0,
+      buyPressure: Math.abs((signals.buyPressure || 50) - 50) > 20 ? 1 : 0,
+      volumeToMcap: (signals.volumeToMcap || 0) > 0.2 ? 1 : 0,
+      buyersPerMinute: (signals.buyersPerMinute || 0) > 5 ? 1 : 0,
+      holders: (signals.holders || 100) < 50 ? 1 : 0
+    };
+    
+    for (const [signal, contribution] of Object.entries(signalContributions)) {
+      if (contribution === 0) continue;
       
-      // Lower minScore if we're missing pumps
-      if (this.calculateWeightedScore(signals) < this.thresholds.minScore) {
-        this.thresholds.minScore = Math.max(40, this.thresholds.minScore - 2);
-      }
-    } else {
-      // Tighten thresholds to exclude this dump
-      if (this.calculateWeightedScore(signals) >= this.thresholds.minScore) {
-        this.thresholds.minScore = Math.min(80, this.thresholds.minScore + 1);
+      // If we under-predicted and this signal was active, increase its weight
+      // If we over-predicted and this signal was active, decrease its weight
+      const adjustment = (error > 0 ? 1 : -1) * learningRate * contribution * (Math.abs(error) / 20);
+      
+      if (this.weights[signal] !== undefined) {
+        this.weights[signal] = Math.max(0.1, Math.min(3.0, this.weights[signal] + adjustment));
       }
     }
+    
+    // Also adjust soft penalties based on outcomes
+    if (actualVolatility > 10) {
+      // High volatility token - loosen penalties slightly
+      this.softPenalties.marketCapTooLow.penalty = Math.min(0.95, this.softPenalties.marketCapTooLow.penalty + 0.01);
+      this.softPenalties.holdersTooFew.penalty = Math.min(0.95, this.softPenalties.holdersTooFew.penalty + 0.01);
+    }
+  }
+
+  getAgeContribution(age) {
+    if (!age) return 0;
+    if (age < 2) return 1;
+    if (age < 5) return 0.7;
+    if (age < 15) return 0.3;
+    return 0;
+  }
+
+  getBCProgressContribution(progress) {
+    if (!progress) return 0;
+    if (progress >= 60 && progress < 85) return 1;
+    if (progress >= 40 && progress < 60) return 0.5;
+    return 0;
+  }
+
+  // LEGACY: Keep for backward compatibility
+  async learnFromOutcome(signals, outcome, pnlPercent) {
+    // Convert to volatility-based learning
+    const maxUp = outcome === 'pump' || outcome === 'strong_pump' || outcome === 'weak_pump' 
+      ? Math.abs(pnlPercent) : 0;
+    const maxDown = outcome === 'dump' || outcome === 'strong_dump' || outcome === 'weak_dump'
+      ? -Math.abs(pnlPercent) : 0;
+    
+    return this.learnFromVolatility(signals, maxUp, maxDown, pnlPercent, 10);
+  }
+
+  // LEGACY: Keep for backward compatibility
+  predictPump(signals) {
+    const volatility = this.predictVolatility(signals);
+    return volatility >= 7; // Tradeable or higher
+  }
+
+  // LEGACY: Keep for backward compatibility  
+  calculateWeightedScore(signals) {
+    return this.predictVolatility(signals) * 3 + 50; // Scale to 50-100 range
   }
 
   // Get top performing signals
@@ -281,95 +296,54 @@ class SelfLearner {
   getStrategy() {
     return {
       weights: this.weights,
-      thresholds: this.thresholds,
+      softPenalties: this.softPenalties,
       performance: this.performance,
       topSignals: this.getTopSignals(),
-      recommendation: this.getRecommendation()
+      recommendation: this.getRecommendation(),
+      learningRate: this.getLearningRate()
     };
   }
 
   getRecommendation() {
-    if (this.performance.totalPredictions < 50) {
+    if (this.performance.totalPredictions < 20) {
       return 'Still learning - need more data';
     }
-    if (this.performance.accuracy >= 65) {
-      return 'Strategy performing well';
+    if (this.performance.volatilityAccuracy >= 60) {
+      return 'Volatility prediction performing well';
     }
-    if (this.performance.accuracy >= 55) {
-      return 'Strategy needs improvement';
+    if (this.performance.volatilityAccuracy >= 45) {
+      return 'Volatility prediction needs improvement';
     }
-    return 'Strategy underperforming - adjusting';
+    return 'Volatility prediction underperforming - adjusting';
   }
 
   // Auto-optimize based on recent performance
   async autoOptimize(recentOutcomes) {
-    if (recentOutcomes.length < 20) return;
+    if (recentOutcomes.length < 10) return;
 
-    const recentAccuracy = recentOutcomes.filter(o => {
-      const predicted = this.predictPump(o.signals);
-      const actual = o.outcome === 'pump';
-      return predicted === actual;
-    }).length / recentOutcomes.length;
-
-    console.log(`Recent accuracy: ${(recentAccuracy * 100).toFixed(1)}%`);
-
-    // If recent accuracy is bad, increase learning rate temporarily
-    if (recentAccuracy < 0.5) {
-      this.learningRate = Math.min(0.3, this.learningRate * 1.5);
-      console.log(`Increased learning rate to ${this.learningRate}`);
-    } else if (recentAccuracy > 0.65) {
-      this.learningRate = Math.max(0.05, this.learningRate * 0.8);
-      console.log(`Decreased learning rate to ${this.learningRate}`);
-    }
-
-    // Find which signals are most predictive recently
-    const signalCorrelations = {};
-    for (const signal of Object.keys(this.weights)) {
-      let correct = 0;
-      let total = 0;
-      
-      for (const o of recentOutcomes) {
-        const signalValue = this.getSignalValue(o.signals, signal);
-        if (signalValue === null) continue;
-        
-        const signalPositive = signalValue > 0;
-        const wasPump = o.outcome === 'pump';
-        
-        if (signalPositive === wasPump) correct++;
-        total++;
-      }
-      
-      if (total > 10) {
-        signalCorrelations[signal] = correct / total;
+    // Calculate recent volatility prediction accuracy
+    let correctBuckets = 0;
+    for (const o of recentOutcomes) {
+      const predicted = this.predictVolatility(o.signals);
+      const actual = Math.max(Math.abs(o.maxUp || 0), Math.abs(o.maxDown || 0));
+      if (this.getVolatilityBucket(predicted) === this.getVolatilityBucket(actual)) {
+        correctBuckets++;
       }
     }
+    
+    const recentAccuracy = correctBuckets / recentOutcomes.length;
+    console.log(`Recent volatility accuracy: ${(recentAccuracy * 100).toFixed(1)}%`);
 
-    // Boost weights of highly correlated signals
-    for (const [signal, correlation] of Object.entries(signalCorrelations)) {
-      if (correlation > 0.6) {
-        this.weights[signal] = Math.min(3.0, this.weights[signal] * 1.1);
-      } else if (correlation < 0.4) {
-        this.weights[signal] = Math.max(0.1, this.weights[signal] * 0.9);
-      }
+    // Adjust base learning rate based on recent performance
+    if (recentAccuracy < 0.4) {
+      this.baseLearningRate = Math.min(0.25, this.baseLearningRate * 1.2);
+      console.log(`Increased base learning rate to ${this.baseLearningRate}`);
+    } else if (recentAccuracy > 0.6) {
+      this.baseLearningRate = Math.max(0.05, this.baseLearningRate * 0.9);
+      console.log(`Decreased base learning rate to ${this.baseLearningRate}`);
     }
 
     await this.save();
-  }
-
-  getSignalValue(signals, signal) {
-    const value = signals[signal];
-    if (value === undefined || value === null) return null;
-    
-    // Normalize to positive/negative
-    switch (signal) {
-      case 'buyPressure': return value - 50;
-      case 'priceChange1h':
-      case 'priceChange24h': return value;
-      case 'whalePercent':
-      case 'top10Percent': return -value; // Lower is better
-      case 'distributionScore': return value - 50;
-      default: return value > 0 ? 1 : -1;
-    }
   }
 
   // Flatten signals from nested structure
@@ -384,6 +358,7 @@ class SelfLearner {
       data.holderSignals,
       data.securitySignals,
       data.recentTradeSignals,
+      data.earlySignals,
       data.token
     ];
 
