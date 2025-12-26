@@ -15,8 +15,16 @@ export default {
   groqApiKey: process.env.GROQ_API_KEY,
   perplexityApiKey: process.env.PERPLEXITY_API_KEY,
   birdeyeApiKey: process.env.BIRDEYE_API_KEY,
+  // Helius - Rate Limits based on plan
   heliusApiKey: process.env.HELIUS_API_KEY,
   heliusRpcUrl: process.env.HELIUS_RPC_URL || `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,
+  heliusPlan: process.env.HELIUS_PLAN || 'free',
+  heliusRateLimits: {
+    free: { rps: 10, dailyCredits: 100000 },
+    developer: { rps: 50, dailyCredits: 500000 },
+    business: { rps: 200, dailyCredits: 2000000 },
+    professional: { rps: 500, dailyCredits: 5000000 }
+  },
   privateKey: process.env.PRIVATE_KEY,
   
   // Ports
