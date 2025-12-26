@@ -358,10 +358,9 @@ class HeliusService {
           // Skip if already added
           if (allTokens.find(x => x.mint === t.address)) continue;
           
-          // FILTER: $5k - $10M mcap (wider range to get more data)
+          // NO FILTER - let AI learn which market caps perform best
           const mcap = t.mc || t.realMc || 0;
-          if (mcap > 10000000) continue; // Skip >$10M 
-          if (mcap < 5000) continue; // Skip <$5k (dead tokens)
+          if (mcap < 1000) continue; // Only skip dead tokens
           
           allTokens.push({
             mint: t.address,
