@@ -358,12 +358,10 @@ class HeliusService {
           // Skip if already added
           if (allTokens.find(x => x.mint === t.address)) continue;
           
-          // FILTER: Only small cap tokens with pump potential
+          // FILTER: $10k - $500k mcap (sweet spot for 100x plays)
           const mcap = t.mc || t.realMc || 0;
-          
-          // Skip tokens that are too big (already pumped) or too small (no liquidity)
-          if (mcap > 5000000) continue; // Skip >$5M mcap (already discovered)
-          if (mcap < 1000) continue; // Skip <$1k (no liquidity/dead)
+          if (mcap > 500000) continue; // Skip >$500k (already pumped)
+          if (mcap < 10000) continue; // Skip <$10k (too early/risky)
           
           allTokens.push({
             mint: t.address,
