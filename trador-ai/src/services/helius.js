@@ -846,6 +846,107 @@ class HeliusService {
       return null;
     }
   }
+
+  // SNIPER & BUNDLE DETECTION - Detect coordinated buys in first block
+  // If 10+ wallets buy in the same block as mint, it's a "bundle" launch
+  async getSniperAnalysis(mintAddress) {
+    try {
+      // Get the first transactions for this token (oldest first)
+      const signatures = await this.rpc('getSignaturesForAddress', [
+        mintAddress,
+        { limit: 50 }
+      ]);
+      
+      if (!signatures || signatures.length === 0) {
+        return { analyzed: false, reason: 'no_transactions' };
+      }
+      
+      // Sort by slot (block) to get earliest transactions
+      const sortedSigs = signatures.sort((a, b) => (a.slot || 0) - (b.slot || 0));
+      
+      // Get the first block's slot
+      const firstSlot = sortedSigs[0]?.slot;
+      if (!firstSlot) {
+        return { analyzed: false, reason: 'no_slot_info' };
+      }
+      
+      // Find all transactions in the first block (same slot)
+      const firstBlockTxs = sortedSigs.filter(sig => sig.slot === firstSlot);
+      
+      // Also check the next few blocks (within 2 slots = ~1 second)
+      const earlyTxs = sortedSigs.filter(sig => sig.slot <= firstSlot + 2);
+      
+      // Get unique signers from early transactions
+      const uniqueSigners = new Set();
+      const signerDetails = [];
+      
+      // Parse each early transaction to get signers
+      for (const sig of earlyTxs.slice(0, 20)) { // Limit to avoid rate limits
+        try {
+          const tx = await this.getTransaction(sig.signature);
+          if (tx?.transaction?.message?.accountKeys) {
+            // First account key is usually the fee payer/signer
+            const accounts = tx.transaction.message.accountKeys;
+            for (const acc of accounts) {
+              const pubkey = typeof acc === 'string' ? acc : acc.pubkey;
+              if (pubkey && !pubkey.includes('1111111111')) { // Skip system programs
+                uniqueSigners.add(pubkey);
+                signerDetails.push({
+                  address: pubkey,
+                  slot: sig.slot,
+                  signature: sig.signature
+                });
+              }
+            }
+          }
+          // Small delay to avoid rate limits
+          await new Promise(r => setTimeout(r, 50));
+        } catch (e) {
+          // Skip failed transaction parsing
+        }
+      }
+      
+      const sniperCount = uniqueSigners.size;
+      const firstBlockSigners = firstBlockTxs.length;
+      
+      // Bundle detection: 10+ unique wallets in first block = bundled launch
+      const isBundled = sniperCount >= 10;
+      
+      // High sniper count: 20+ wallets = very coordinated, high dump risk
+      const isHighSniperCount = sniperCount >= 20;
+      
+      // Calculate sniper concentration
+      const sniperConcentration = earlyTxs.length > 0 ? (sniperCount / earlyTxs.length) * 100 : 0;
+      
+      console.log(`[SNIPER] ${mintAddress.slice(0, 8)}: ${sniperCount} snipers, ${firstBlockSigners} first-block txs, bundled=${isBundled}`);
+      
+      return {
+        analyzed: true,
+        sniperCount,
+        firstBlockSigners,
+        firstBlockTxCount: firstBlockTxs.length,
+        earlyTxCount: earlyTxs.length,
+        isBundled,
+        isHighSniperCount,
+        sniperConcentration: Math.round(sniperConcentration),
+        // Risk assessment
+        bundleRisk: isBundled ? (isHighSniperCount ? 'HIGH' : 'MEDIUM') : 'LOW',
+        // Top snipers (first 5)
+        topSnipers: [...uniqueSigners].slice(0, 5),
+        // Signals for learning
+        signals: {
+          sniperCount,
+          isBundled: isBundled ? 1 : 0,
+          isHighSniperCount: isHighSniperCount ? 1 : 0,
+          firstBlockTxCount: firstBlockTxs.length,
+          sniperConcentration
+        }
+      };
+    } catch (err) {
+      console.error(`[SNIPER] Analysis failed for ${mintAddress}:`, err.message);
+      return { analyzed: false, reason: err.message };
+    }
+  }
 }
 
 export default new HeliusService();

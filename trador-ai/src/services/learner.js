@@ -1,4 +1,10 @@
 import storage from './storage.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class SelfLearner {
   constructor() {
@@ -368,6 +374,119 @@ class SelfLearner {
       }
     }
     return flat;
+  }
+
+  // TRAINING DATA PERSISTENCE - Save every completed outcome to JSONL for ML training
+  // Schema: all input signals + interaction features + labels (maxUp, maxDown, volatilityBucket)
+  async saveTrainingData(tracked, windowMinutes, volatilityOutcome) {
+    try {
+      const trainingDataPath = path.join(__dirname, '../../data/training_data.jsonl');
+      
+      // Build the training record with all signals
+      const tokenData = tracked.tokenData || {};
+      const holderAnalysis = tracked.holderAnalysis || {};
+      
+      // Calculate interaction features
+      const mcap = tokenData.marketCap || 0;
+      const velocity = tokenData.bondingCurveVelocity || 0;
+      const velocityToMcapRatio = mcap > 0 ? (velocity / (mcap / 1000)) : 0; // Velocity per $1k mcap
+      
+      const trainingRecord = {
+        // Timestamp
+        timestamp: Date.now(),
+        windowMinutes,
+        
+        // INPUT SIGNALS - Basic
+        mcap: tokenData.marketCap || 0,
+        liquidity: tokenData.liquidity || 0,
+        holders: tokenData.holders || 0,
+        tokenAge: tokenData.tokenAge || 0,
+        
+        // INPUT SIGNALS - Bonding Curve
+        bcProgress: tokenData.bondingCurveProgress || 0,
+        bcVelocity: tokenData.bondingCurveVelocity || 0,
+        
+        // INPUT SIGNALS - Trading Activity
+        buyPressure: tokenData.buyPressure || 50,
+        buyersPerMinute: tokenData.buyersPerMinute || 0,
+        volume24h: tokenData.volume24h || 0,
+        txns24h: tokenData.txns24h || 0,
+        volumeToMcap: tokenData.volumeToMcap || 0,
+        
+        // INPUT SIGNALS - Price Changes
+        priceChange1h: tokenData.priceChange1h || 0,
+        priceChange24h: tokenData.priceChange24h || 0,
+        
+        // INPUT SIGNALS - Holder Distribution
+        top1Percent: holderAnalysis.top1Percent || 0,
+        top10Percent: holderAnalysis.top10Percent || 0,
+        distributionScore: holderAnalysis.distributionScore || 0,
+        
+        // INPUT SIGNALS - Sniper/Bundle Detection
+        sniperCount: tokenData.sniperCount || 0,
+        isBundled: tokenData.isBundled ? 1 : 0,
+        
+        // INTERACTION FEATURES
+        velocity_to_mcap_ratio: velocityToMcapRatio,
+        buyers_per_holder: tokenData.holders > 0 ? (tokenData.buyersPerMinute || 0) / tokenData.holders : 0,
+        volume_per_holder: tokenData.holders > 0 ? (tokenData.volume24h || 0) / tokenData.holders : 0,
+        
+        // LABELS - What actually happened
+        maxUp: tracked.maxUp || 0,
+        maxDown: tracked.maxDown || 0,
+        finalPnl: tracked.currentPnl || 0,
+        volatilityBucket: volatilityOutcome.bucket,
+        direction: volatilityOutcome.direction,
+        volatilityScore: volatilityOutcome.volatilityScore,
+        
+        // METADATA
+        symbol: tokenData.symbol || tracked.symbol,
+        mint: tokenData.mint || tracked.mint,
+        source: tokenData.source || 'unknown'
+      };
+      
+      // Append to JSONL file
+      const jsonLine = JSON.stringify(trainingRecord) + '\n';
+      fs.appendFileSync(trainingDataPath, jsonLine);
+      
+      // Log every 10th save
+      const lineCount = this.getTrainingDataCount();
+      if (lineCount % 10 === 0) {
+        console.log(`[ML-DATA] Saved ${lineCount} training samples to training_data.jsonl`);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('[ML-DATA] Failed to save training data:', err.message);
+      return false;
+    }
+  }
+
+  // Get count of training data samples
+  getTrainingDataCount() {
+    try {
+      const trainingDataPath = path.join(__dirname, '../../data/training_data.jsonl');
+      if (!fs.existsSync(trainingDataPath)) return 0;
+      const content = fs.readFileSync(trainingDataPath, 'utf8');
+      return content.split('\n').filter(line => line.trim()).length;
+    } catch (err) {
+      return 0;
+    }
+  }
+
+  // Load training data for ML model training
+  loadTrainingData() {
+    try {
+      const trainingDataPath = path.join(__dirname, '../../data/training_data.jsonl');
+      if (!fs.existsSync(trainingDataPath)) return [];
+      const content = fs.readFileSync(trainingDataPath, 'utf8');
+      return content.split('\n')
+        .filter(line => line.trim())
+        .map(line => JSON.parse(line));
+    } catch (err) {
+      console.error('[ML-DATA] Failed to load training data:', err.message);
+      return [];
+    }
   }
 }
 

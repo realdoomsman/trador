@@ -270,9 +270,27 @@ class TradingBrain {
       // Continue without deep analysis
     }
 
+    // SNIPER & BUNDLE DETECTION - For pump.fun tokens, analyze first-block buyers
+    // This detects coordinated launches (bundles) which have high pump potential but extreme dump risk
+    const isPumpFun = tokenData.isPumpFun || tokenData.source === 'pumpfun' || tokenData.bonding_curve;
+    
+    if (isPumpFun) {
+      try {
+        const sniperAnalysis = await helius.getSniperAnalysis(tokenData.mint);
+        if (sniperAnalysis?.analyzed) {
+          enrichedData.sniperCount = sniperAnalysis.sniperCount;
+          enrichedData.isBundled = sniperAnalysis.isBundled;
+          enrichedData.isHighSniperCount = sniperAnalysis.isHighSniperCount;
+          enrichedData.bundleRisk = sniperAnalysis.bundleRisk;
+          enrichedData.sniperConcentration = sniperAnalysis.sniperConcentration;
+        }
+      } catch (err) {
+        // Continue without sniper analysis
+      }
+    }
+    
     // FAST ENTRY CHECK - For early pump.fun tokens (< 2 min old)
     // Skip AI consensus entirely to avoid latency
-    const isPumpFun = tokenData.isPumpFun || tokenData.source === 'pumpfun' || tokenData.bonding_curve;
     const fastEntryResult = isPumpFun ? this.passesFastEntryFilter(enrichedData, deepAnalysis) : { pass: false };
     
     if (fastEntryResult.pass) {
@@ -553,6 +571,8 @@ class TradingBrain {
 
   // FAST ENTRY FILTER - For early pump.fun tokens (NO AI LATENCY)
   // Returns { pass: boolean, reason: string, signals: object }
+  // UPDATED: Changed zone from 60-85% to 30-75% (avoid exit liquidity zone)
+  // ADDED: Bundle guard to reject high-sniper bundled launches
   passesFastEntryFilter(tokenData, deepAnalysis = null) {
     const ageMinutes = tokenData.ageMinutes || 
       ((Date.now() - new Date(tokenData.created_timestamp).getTime()) / 60000);
@@ -566,8 +586,9 @@ class TradingBrain {
     const bcProgress = tokenData.bondingCurveProgress || 
       bondingCurve.calculateProgress(tokenData.virtual_sol_reserves || 0);
     
-    // Must be in the graduation zone (60-85%)
-    if (bcProgress < 60 || bcProgress > 85) {
+    // UPDATED: Must be in the 30-75% zone (avoid 85% exit liquidity trap)
+    // 85% is where early snipers dump before Raydium migration
+    if (bcProgress < 30 || bcProgress > 75) {
       return { pass: false, reason: `bc_progress_${bcProgress.toFixed(0)}%`, signals: null };
     }
     
@@ -580,6 +601,12 @@ class TradingBrain {
     // Must have positive velocity (buyers increasing)
     if (velocityAnalysis.velocity <= 0) {
       return { pass: false, reason: 'no_momentum', signals: null };
+    }
+    
+    // BUNDLE GUARD: Check sniper/bundle data if available
+    // If token is bundled with 20+ snipers, reject for fast entry (too much dump risk)
+    if (tokenData.isBundled && tokenData.sniperCount > 20) {
+      return { pass: false, reason: `high_sniper_bundle_${tokenData.sniperCount}`, signals: null };
     }
     
     // Check top holder concentration (no wallet > 15%)
@@ -597,6 +624,12 @@ class TradingBrain {
     // Calculate early signals
     const earlySignals = this.calculateEarlySignals(tokenData, velocityAnalysis);
     
+    // Add sniper data to signals if available
+    if (tokenData.sniperCount !== undefined) {
+      earlySignals.sniperCount = tokenData.sniperCount;
+      earlySignals.isBundled = tokenData.isBundled ? 1 : 0;
+    }
+    
     // Additional quality checks
     const marketCap = tokenData.usd_market_cap || 0;
     if (marketCap < 5000) {
@@ -604,7 +637,8 @@ class TradingBrain {
     }
     
     // PASSED - This is a fast entry candidate
-    console.log(`[FAST-ENTRY] ${tokenData.symbol} PASSED | Age: ${ageMinutes.toFixed(1)}min | BC: ${bcProgress.toFixed(0)}% | Velocity: ${velocityAnalysis.velocity.toFixed(1)}%/min`);
+    const bundleInfo = tokenData.isBundled ? ` | Bundled: ${tokenData.sniperCount} snipers` : '';
+    console.log(`[FAST-ENTRY] ${tokenData.symbol} PASSED | Age: ${ageMinutes.toFixed(1)}min | BC: ${bcProgress.toFixed(0)}% | Velocity: ${velocityAnalysis.velocity.toFixed(1)}%/min${bundleInfo}`);
     
     return { 
       pass: true, 
@@ -1054,6 +1088,12 @@ class TradingBrain {
         bondingCurveProgress: tokenData.bondingCurveProgress || 0,
         bondingCurveVelocity: tokenData.bondingCurveVelocity || 0,
         tokenAge: tokenData.ageMinutes || 0,
+        // Sniper/Bundle data
+        sniperCount: tokenData.sniperCount || 0,
+        isBundled: tokenData.isBundled || false,
+        isHighSniperCount: tokenData.isHighSniperCount || false,
+        bundleRisk: tokenData.bundleRisk || 'UNKNOWN',
+        sniperConcentration: tokenData.sniperConcentration || 0,
         // Time context
         hour: new Date().getHours(),
         dayOfWeek: new Date().getDay(),
@@ -1194,6 +1234,12 @@ class TradingBrain {
             tracked.currentPnl || 0,
             windowMinutes
           );
+          
+          // TRAINING DATA PERSISTENCE - Save to JSONL for ML model training
+          // Save at 10-minute window (final outcome) for XGBoost training
+          if (windowMinutes === 10) {
+            await learner.saveTrainingData(tracked, windowMinutes, volatilityOutcome);
+          }
           
           // Save outcome
           await storage.saveOutcome({ 
