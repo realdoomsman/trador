@@ -319,24 +319,22 @@ class HeliusService {
     return verifiedTokens;
   }
 
-  // Birdeye API - Focus on NEW, SMALL tokens that can 100x
+  // Birdeye API - Get tokens with various sorting
   async getBirdeyeTokens() {
     if (!this.birdeyeKey) return [];
     
     const allTokens = [];
     
-    // Focus on finding early-stage tokens with pump potential
+    // Use valid Birdeye sort options
     const endpoints = [
-      // NEW tokens - recently created (most important for 100x plays)
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=createdAt&sort_type=desc&offset=0&limit=50', name: 'newest' },
-      // Recently traded - fresh activity on new tokens
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=lastTradeUnixTime&sort_type=desc&offset=0&limit=40', name: 'recent trades' },
-      // 30min volume - catching pumps as they start
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mUSD&sort_type=desc&offset=0&limit=30', name: '30m vol' },
-      // 1h gainers - tokens already pumping
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hChangePercent&sort_type=desc&offset=0&limit=30', name: '1h gainers' },
-      // 30m gainers - very recent pumps
-      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v30mChangePercent&sort_type=desc&offset=0&limit=30', name: '30m gainers' }
+      // 24h volume - most active tokens
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v24hUSD&sort_type=desc&offset=0&limit=50', name: '24h vol' },
+      // 1h volume - recent activity
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=v1hUSD&sort_type=desc&offset=0&limit=50', name: '1h vol' },
+      // Market cap ascending - smaller tokens first
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=mc&sort_type=asc&offset=0&limit=50', name: 'low mcap' },
+      // Liquidity - tokens with trading activity
+      { url: 'https://public-api.birdeye.so/defi/tokenlist?sort_by=liquidity&sort_type=desc&offset=0&limit=50', name: 'liquidity' }
     ];
     
     for (const { url, name } of endpoints) {
@@ -348,10 +346,18 @@ class HeliusService {
           }
         });
         
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.log(`[BIRDEYE] ${name} failed: ${res.status}`);
+          continue;
+        }
         
         const data = await res.json();
-        if (!data.data?.tokens) continue;
+        if (!data.data?.tokens) {
+          console.log(`[BIRDEYE] ${name} returned no tokens`);
+          continue;
+        }
+        
+        console.log(`[BIRDEYE] ${name}: ${data.data.tokens.length} tokens`);
         
         let added = 0;
         for (const t of data.data.tokens) {
