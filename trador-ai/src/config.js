@@ -85,14 +85,15 @@ export default {
   outcomeCheckInterval: 30000,  // 30 seconds - check outcomes more frequently
   
   // FIXED: Multiple outcome check windows (in minutes)
-  outcomeWindows: [3, 5, 10],   // Check at 3, 5, and 10 minutes
-  pumpThreshold: 10,            // 10% = pump (lowered from 15%)
-  microPumpThreshold: 5,        // 5-10% = micro-pump
-  dumpThreshold: -10,           // -10% = dump (lowered from -15%)
+  // Added 1-minute window for faster learning on memecoins
+  outcomeWindows: [1, 3, 5, 10],   // Check at 1, 3, 5, and 10 minutes
+  pumpThreshold: 8,             // 8% = pump (lowered from 10% - most good pumps are 8-12%)
+  microPumpThreshold: 4,        // 4-8% = micro-pump
+  dumpThreshold: -8,            // -8% = dump (lowered from -10%)
   
-  // MFE/MAE thresholds
-  mfePumpThreshold: 15,         // 15% MFE at any point = PUMP
-  maeDumpThreshold: -10,        // 10% MAE before pump = DUMP
+  // MFE/MAE thresholds - LOWERED for faster detection
+  mfePumpThreshold: 8,          // 8% MFE at any point = PUMP (was 15%)
+  maeDumpThreshold: -8,         // 8% MAE before pump = DUMP (was -10%)
   
   // Token tracking
   maxTrackedTokens: 800,        // Increased from 300 to 800

@@ -1005,7 +1005,8 @@ class TradingBrain {
       maxDown: 0,
       maxUpTime: null,
       maxDownTime: null,
-      // Per-window learning flags
+      // Per-window learning flags - Added 1min for faster learning
+      learned_1min: false,
       learned_3min: false,
       learned_5min: false,
       learned_10min: false,
@@ -1069,6 +1070,7 @@ class TradingBrain {
   }
 
   // UPDATE TRACKED PRICES - Called every 5s for maxUp/maxDown tracking
+  // Now includes MICRO-LEARNING from positions that are still active
   async updateTrackedPrices() {
     const now = Date.now();
     const batchSize = 15; // Update 15 tokens at a time
@@ -1102,6 +1104,31 @@ class TradingBrain {
           tracked.maxDown = pnlPercent;
           tracked.maxDownTime = now;
           tracked.lowestPrice = currentPrice;
+        }
+        
+        // MICRO-LEARNING: Learn from significant moves while position is still active
+        // This gives us data points BEFORE the final outcome
+        const ageMinutes = (now - tracked.entryTime) / 60000;
+        if (!tracked.microLearned && ageMinutes >= 0.5) { // After 30 seconds
+          const volatility = Math.max(Math.abs(tracked.maxUp), Math.abs(tracked.maxDown));
+          
+          // If we see a significant move (>4%), learn from it immediately
+          if (volatility >= 4 && !tracked.microLearned) {
+            tracked.microLearned = true;
+            const microOutcome = this.classifyVolatility(tracked.maxUp, tracked.maxDown);
+            
+            console.log(`[MICRO-LEARN] ${tracked.symbol}: ${microOutcome.bucket} at ${ageMinutes.toFixed(1)}min | maxUp=${tracked.maxUp.toFixed(1)}% maxDown=${tracked.maxDown.toFixed(1)}%`);
+            
+            // Learn from this early signal
+            const flatSignals = learner.flattenSignals(tracked.tokenData || {});
+            await learner.learnFromVolatility(
+              flatSignals,
+              tracked.maxUp,
+              tracked.maxDown,
+              pnlPercent,
+              ageMinutes
+            );
+          }
         }
         
         // Legacy MFE/MAE for compatibility
@@ -1214,22 +1241,25 @@ class TradingBrain {
     }
   }
 
-  // Classify volatility into buckets
+  // Classify volatility into buckets - LOWERED THRESHOLDS for memecoins
   classifyVolatility(maxUp, maxDown) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     const direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     
     let bucket;
-    if (maxUp >= 15) {
+    // LOWERED: 8% thresholds instead of 15%/7% - most good pumps are 8-12%
+    if (maxUp >= 12) {
       bucket = 'strong_pump';
-    } else if (maxUp >= 7) {
+    } else if (maxUp >= 8) {
       bucket = 'weak_pump';
-    } else if (maxDown <= -15) {
+    } else if (maxDown <= -12) {
       bucket = 'strong_dump';
-    } else if (maxDown <= -7) {
+    } else if (maxDown <= -8) {
       bucket = 'weak_dump';
+    } else if (maxUp >= 4 || maxDown <= -4) {
+      bucket = 'micro_move'; // 4-8% moves - still tradeable
     } else {
-      bucket = 'chop'; // maxUp < 7% AND maxDown > -7%
+      bucket = 'chop'; // maxUp < 4% AND maxDown > -4%
     }
     
     return { bucket, direction, volatilityScore, maxUp, maxDown };
@@ -1239,6 +1269,7 @@ class TradingBrain {
   updateVolatilityStats(outcome) {
     if (!this.state.stats.strong_pumps) this.state.stats.strong_pumps = 0;
     if (!this.state.stats.weak_pumps) this.state.stats.weak_pumps = 0;
+    if (!this.state.stats.micro_moves) this.state.stats.micro_moves = 0;
     if (!this.state.stats.chops) this.state.stats.chops = 0;
     if (!this.state.stats.weak_dumps) this.state.stats.weak_dumps = 0;
     if (!this.state.stats.strong_dumps) this.state.stats.strong_dumps = 0;
@@ -1246,6 +1277,7 @@ class TradingBrain {
     switch (outcome.bucket) {
       case 'strong_pump': this.state.stats.strong_pumps++; this.state.stats.pumps++; break;
       case 'weak_pump': this.state.stats.weak_pumps++; this.state.stats.pumps++; break;
+      case 'micro_move': this.state.stats.micro_moves++; break; // Track micro moves separately
       case 'chop': this.state.stats.chops++; this.state.stats.neutral++; break;
       case 'weak_dump': this.state.stats.weak_dumps++; this.state.stats.dumps++; break;
       case 'strong_dump': this.state.stats.strong_dumps++; this.state.stats.dumps++; break;

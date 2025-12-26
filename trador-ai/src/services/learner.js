@@ -129,12 +129,12 @@ class SelfLearner {
     return { volatilityBucket, direction, volatilityScore, predictedVolatility };
   }
 
-  // Get volatility bucket
+  // Get volatility bucket - LOWERED THRESHOLDS for memecoins
   getVolatilityBucket(volatilityScore) {
-    if (volatilityScore < 5) return 'dead';
-    if (volatilityScore < 10) return 'tradeable';
-    if (volatilityScore < 20) return 'high_alpha';
-    return 'extreme';
+    if (volatilityScore < 4) return 'dead';        // <4% = dead
+    if (volatilityScore < 8) return 'tradeable';   // 4-8% = tradeable (was 5-10%)
+    if (volatilityScore < 15) return 'high_alpha'; // 8-15% = high alpha (was 10-20%)
+    return 'extreme';                               // 15%+ = extreme (was 20%+)
   }
 
   // Predict volatility (not direction)
@@ -276,7 +276,7 @@ class SelfLearner {
   // LEGACY: Keep for backward compatibility
   predictPump(signals) {
     const volatility = this.predictVolatility(signals);
-    return volatility >= 7; // Tradeable or higher
+    return volatility >= 4; // 4%+ = tradeable (lowered from 7%)
   }
 
   // LEGACY: Keep for backward compatibility  

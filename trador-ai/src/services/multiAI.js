@@ -263,7 +263,7 @@ REASONING: [one sentence]`;
   }
 
   // GET MULTI-AI CONSENSUS - WITH RACE/THRESHOLD LOGIC
-  // Don't wait for all AIs - if fast ones agree with high confidence, execute immediately
+  // OPTIMIZED: Only call slow AIs when fast ones disagree or have low confidence
   async getConsensus(tokenData, context) {
     const analyses = [];
     const startTime = Date.now();
@@ -278,12 +278,12 @@ REASONING: [one sentence]`;
     if (this.claudeKey) slowAIs.push(() => this.analyzeWithClaude(tokenData, context));
     if (this.openaiKey) slowAIs.push(() => this.analyzeWithOpenAI(tokenData, context));
     
-    // PHASE 1: Race fast AIs with 1.5s timeout
+    // PHASE 1: Race fast AIs with 1s timeout (reduced from 1.5s)
     if (fastAIs.length > 0) {
       const fastPromises = fastAIs.map(fn => 
         Promise.race([
           fn(),
-          new Promise(resolve => setTimeout(() => resolve(null), 1500))
+          new Promise(resolve => setTimeout(() => resolve(null), 1000))
         ])
       );
       
@@ -302,14 +302,28 @@ REASONING: [one sentence]`;
           return this.buildConsensusResult(analyses, tokenData, true);
         }
       }
+      
+      // EARLY EXIT: If 1 fast AI has very high confidence (90%+), trust it
+      if (analyses.length >= 1) {
+        const strongSignal = analyses.find(a => a.confidence >= 90);
+        if (strongSignal) {
+          console.log(`[AI-RACE] Strong signal from ${strongSignal.source}: ${strongSignal.signal} (${Date.now() - startTime}ms)`);
+          return this.buildConsensusResult(analyses, tokenData, true);
+        }
+      }
     }
     
-    // PHASE 2: Run slow AIs with 3s timeout (only if no early consensus)
-    if (slowAIs.length > 0) {
+    // PHASE 2: Only run slow AIs if fast ones disagree or have low confidence
+    // Use shorter 2s timeout (reduced from 3s)
+    const needSlowAIs = analyses.length < 2 || 
+      analyses.some(a => a.confidence < 60) ||
+      (analyses[0]?.signal !== analyses[1]?.signal);
+    
+    if (slowAIs.length > 0 && needSlowAIs) {
       const slowPromises = slowAIs.map(fn =>
         Promise.race([
           fn(),
-          new Promise(resolve => setTimeout(() => resolve(null), 3000))
+          new Promise(resolve => setTimeout(() => resolve(null), 2000))
         ])
       );
       
@@ -321,8 +335,8 @@ REASONING: [one sentence]`;
       }
     }
     
-    console.log(`[AI-RACE] Full consensus: ${analyses.length} AIs (${Date.now() - startTime}ms)`);
-    return this.buildConsensusResult(analyses, tokenData, false);
+    console.log(`[AI-RACE] ${needSlowAIs ? 'Full' : 'Fast-only'} consensus: ${analyses.length} AIs (${Date.now() - startTime}ms)`);
+    return this.buildConsensusResult(analyses, tokenData, !needSlowAIs);
   }
 
   // Check if fast AIs have strong agreement (for early exit)
