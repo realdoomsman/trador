@@ -10,6 +10,7 @@ import multiAI from './multiAI.js';
 import externalTools from './externalTools.js';
 import socialIntel from './socialIntel.js';
 import bondingCurve from './bondingCurve.js';
+import pumpfunWS from './pumpfunWS.js';
 
 class TradingBrain {
   constructor() {
@@ -35,7 +36,12 @@ class TradingBrain {
         tokensTracked: 0,
         pumps: 0,
         dumps: 0,
-        neutral: 0
+        neutral: 0,
+        // NEW: MFE/MAE stats
+        avgMFE: 0,  // Average Maximum Favorable Excursion
+        avgMAE: 0,  // Average Maximum Adverse Excursion
+        pumpsCaughtByMFE: 0,
+        missedPumps: 0
       },
       backtestResults: null,
       learnedPatterns: null
@@ -46,9 +52,14 @@ class TradingBrain {
     this.dataBuffer = [];
     this.bufferFlushSize = 5; // Flush even more frequently
     
-    // Price tracking - multiple time windows
+    // Price tracking with MFE/MAE - continuous monitoring
     this.trackedTokens = new Map();
-    this.maxTrackedTokens = 200;
+    this.maxTrackedTokens = 300;
+    
+    // MFE/MAE thresholds
+    this.MFE_PUMP_THRESHOLD = 15;  // 15% gain at any point = PUMP
+    this.MAE_DUMP_THRESHOLD = -10; // 10% loss before pump = DUMP
+    this.MAX_TRACK_TIME = 10 * 60 * 1000; // 10 minutes max tracking
     
     // Recent analyses for dashboard display
     this.recentAnalyses = [];
@@ -57,6 +68,7 @@ class TradingBrain {
 
   async initialize() {
     console.log('Initializing Trading Brain...');
+    
     
     // Initialize self-learner
     await learner.initialize();
@@ -850,7 +862,70 @@ class TradingBrain {
     this.state.stats.tokensTracked++;
   }
 
-  // Check tracked tokens and learn from outcomes
+  // UPDATE TRACKED PRICES - Called every 5s for MFE/MAE tracking
+  async updateTrackedPrices() {
+    const now = Date.now();
+    const batchSize = 15; // Update 15 tokens at a time
+    const tokens = [...this.trackedTokens.values()]
+      .filter(t => !t.outcomeDecided && (now - (t.lastPriceUpdate || 0)) > 4000)
+      .slice(0, batchSize);
+    
+    if (tokens.length === 0) return;
+    
+    for (const tracked of tokens) {
+      try {
+        const priceData = await this.getTokenPrice(tracked.mint);
+        if (!priceData?.price || priceData.price <= 0) continue;
+        
+        const currentPrice = priceData.price;
+        const pnlPercent = ((currentPrice - tracked.entryPrice) / tracked.entryPrice) * 100;
+        
+        // Initialize MFE/MAE if not set
+        if (!tracked.highestPrice) tracked.highestPrice = tracked.entryPrice;
+        if (!tracked.lowestPrice) tracked.lowestPrice = tracked.entryPrice;
+        if (!tracked.mfePercent) tracked.mfePercent = 0;
+        if (!tracked.maePercent) tracked.maePercent = 0;
+        
+        // Update MFE (highest price seen)
+        if (currentPrice > tracked.highestPrice) {
+          tracked.highestPrice = currentPrice;
+          tracked.highestPriceTime = now;
+          tracked.mfePercent = ((currentPrice - tracked.entryPrice) / tracked.entryPrice) * 100;
+        }
+        
+        // Update MAE (lowest price seen)
+        if (currentPrice < tracked.lowestPrice) {
+          tracked.lowestPrice = currentPrice;
+          tracked.lowestPriceTime = now;
+          tracked.maePercent = ((currentPrice - tracked.entryPrice) / tracked.entryPrice) * 100;
+        }
+        
+        tracked.lastPriceUpdate = now;
+        tracked.currentPrice = currentPrice;
+        tracked.currentPnl = pnlPercent;
+        
+        // CHECK FOR EARLY OUTCOME DECISION
+        // If MFE >= 15%, it's a PUMP (even if it retraces later)
+        if (tracked.mfePercent >= this.MFE_PUMP_THRESHOLD && !tracked.outcomeDecided) {
+          tracked.outcomeDecided = true;
+          tracked.outcome = 'pump';
+          console.log(`[MFE-PUMP] ${tracked.symbol} hit +${tracked.mfePercent.toFixed(1)}%! Marking as PUMP`);
+        }
+        
+        // If MAE <= -10% before hitting pump threshold, it's a DUMP
+        if (tracked.maePercent <= this.MAE_DUMP_THRESHOLD && tracked.mfePercent < this.MFE_PUMP_THRESHOLD && !tracked.outcomeDecided) {
+          tracked.outcomeDecided = true;
+          tracked.outcome = 'dump';
+          console.log(`[MAE-DUMP] ${tracked.symbol} hit ${tracked.maePercent.toFixed(1)}%! Marking as DUMP`);
+        }
+        
+      } catch (err) {
+        // Skip this token
+      }
+    }
+  }
+
+  // Check tracked tokens and learn from outcomes - MFE/MAE BASED
   async checkTrackedOutcomes() {
     const now = Date.now();
     const toRemove = [];

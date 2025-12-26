@@ -248,6 +248,9 @@ async function startBot() {
   
   isRunning = true;
   
+  // CRITICAL: Update tracked token prices every 5 seconds for MFE/MAE tracking
+  const priceTrackInterval = setInterval(() => brain.updateTrackedPrices(), 5000);
+  
   // Scan every 15s for faster reaction (fallback/supplement to WebSocket)
   scanInterval = setInterval(scanLoop, config.scanInterval);
   scanLoop();
@@ -255,8 +258,8 @@ async function startBot() {
   // Update positions every 5s
   positionInterval = setInterval(() => brain.updateVirtualPositions(), config.priceUpdateInterval);
   
-  // Check tracked token outcomes every 30 seconds (multiple windows: 3, 5, 10 min)
-  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 30000);
+  // Check tracked token outcomes every 10 seconds (MFE/MAE based)
+  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 10000);
   
   // Pattern analysis every 15min
   patternInterval = setInterval(() => brain.analyzePatterns(), 900000);
