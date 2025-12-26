@@ -623,6 +623,12 @@ class TradingBrain {
       return { pass: false, reason: `high_sniper_bundle_${tokenData.sniperCount}`, signals: null };
     }
     
+    // SNIPER COUNT FILTER: If > 15 snipers, reject for fast entry
+    // These are "bundled" dev launches that look like high-velocity pumps but dump hard
+    if (tokenData.sniperCount > 15) {
+      return { pass: false, reason: `too_many_snipers_${tokenData.sniperCount}`, signals: null };
+    }
+    
     // Check top holder concentration (no wallet > 15%)
     let topHolderPercent = 0;
     if (deepAnalysis?.holders?.top1Percent) {
@@ -753,6 +759,20 @@ class TradingBrain {
 
   shouldTradeAdvanced(analysis, tokenSignals = null, tokenData = null) {
     if (!analysis) return false;
+    
+    // SNIPER COUNT FILTER: If > 15 snipers, require 90% confidence
+    // This protects against "bundled" dev launches that look like high-velocity pumps
+    const sniperCount = tokenData?.sniperCount || 0;
+    const maxSnipers = 15;
+    if (sniperCount > maxSnipers) {
+      const requiredConfidence = 90;
+      const currentConfidence = analysis.advancedScore || analysis.confidence || 50;
+      if (currentConfidence < requiredConfidence) {
+        console.log(`[SNIPER-FILTER] ${tokenData?.symbol} rejected: ${sniperCount} snipers > ${maxSnipers}, confidence ${currentConfidence}% < ${requiredConfidence}% required`);
+        return false;
+      }
+      console.log(`[SNIPER-FILTER] ${tokenData?.symbol} HIGH RISK: ${sniperCount} snipers, but confidence ${currentConfidence}% >= ${requiredConfidence}%`);
+    }
     
     // FAST ENTRY PATH - For early pump.fun tokens, skip AI entirely
     if (tokenData && analysis.fastEntryApproved) {

@@ -264,9 +264,16 @@ REASONING: [one sentence]`;
 
   // GET MULTI-AI CONSENSUS - WITH RACE/THRESHOLD LOGIC
   // OPTIMIZED: Only call slow AIs when fast ones disagree or have low confidence
+  // NEW: For tokens < 2min old, use FAST-AI ONLY path with 600ms timeout
   async getConsensus(tokenData, context) {
     const analyses = [];
     const startTime = Date.now();
+    const tokenAge = tokenData.ageMinutes || tokenData.tokenAge || 60;
+    
+    // FAST-AI ONLY PATH: For tokens < 2 minutes old, skip slow AIs entirely
+    // Speed is more important than "deep" reasoning for the initial Pump.fun burst
+    const isEarlyToken = tokenAge < 2;
+    const fastTimeout = isEarlyToken ? 600 : 1000; // 600ms for early tokens, 1s otherwise
     
     // FAST AIs first (Groq ~200ms, Gemini ~500ms)
     // SLOW AIs second (Claude ~1-2s, OpenAI ~1-2s)
@@ -278,12 +285,12 @@ REASONING: [one sentence]`;
     if (this.claudeKey) slowAIs.push(() => this.analyzeWithClaude(tokenData, context));
     if (this.openaiKey) slowAIs.push(() => this.analyzeWithOpenAI(tokenData, context));
     
-    // PHASE 1: Race fast AIs with 1s timeout (reduced from 1.5s)
+    // PHASE 1: Race fast AIs with timeout
     if (fastAIs.length > 0) {
       const fastPromises = fastAIs.map(fn => 
         Promise.race([
           fn(),
-          new Promise(resolve => setTimeout(() => resolve(null), 1000))
+          new Promise(resolve => setTimeout(() => resolve(null), fastTimeout))
         ])
       );
       
@@ -292,6 +299,19 @@ REASONING: [one sentence]`;
         if (result.status === 'fulfilled' && result.value) {
           analyses.push(result.value);
         }
+      }
+      
+      // EARLY EXIT for early tokens: If fast AIs timed out, skip the trade
+      if (isEarlyToken && analyses.length === 0) {
+        console.log(`[AI-RACE] Early token ${tokenData.symbol} - fast AIs timed out (${Date.now() - startTime}ms), skipping`);
+        return { 
+          consensus: 'SKIP', 
+          confidence: 0, 
+          analyses: [], 
+          agreement: 0, 
+          wasEarlyExit: true,
+          reason: 'fast_ai_timeout'
+        };
       }
       
       // EARLY EXIT: If 2+ fast AIs agree with high confidence, skip slow AIs
@@ -313,7 +333,14 @@ REASONING: [one sentence]`;
       }
     }
     
-    // PHASE 2: Only run slow AIs if fast ones disagree or have low confidence
+    // PHASE 2: SKIP SLOW AIs for early tokens (< 2 min old)
+    // Waiting 2 seconds for Claude/OpenAI on a 45-second-old token makes us buy the "local top"
+    if (isEarlyToken) {
+      console.log(`[AI-RACE] Early token ${tokenData.symbol} - fast-only path (${Date.now() - startTime}ms)`);
+      return this.buildConsensusResult(analyses, tokenData, true);
+    }
+    
+    // PHASE 2: Only run slow AIs for older tokens if fast ones disagree or have low confidence
     // Use shorter 2s timeout (reduced from 3s)
     const needSlowAIs = analyses.length < 2 || 
       analyses.some(a => a.confidence < 60) ||
