@@ -13,15 +13,15 @@ import socialIntel from './socialIntel.js';
 class TradingBrain {
   constructor() {
     this.state = {
-      confidence: 0,
+      confidence: 50, // Start at 50% - not 0
       dataPoints: 0,
       dataSizeBytes: 0,
       lastTrainingUpdate: null,
       patterns: null,
       isLearning: true,
-      canVirtualTrade: false,
+      canVirtualTrade: true, // START ENABLED - learn by doing
       canLiveTrade: false,
-      riskProfile: 'medium',
+      riskProfile: 'high', // Start aggressive to learn faster
       virtualTrades: [],
       pnl: { daily: 0, weekly: 0, monthly: 0, allTime: 0 },
       stats: {
@@ -31,7 +31,6 @@ class TradingBrain {
         virtualLosses: 0,
         avgWinPercent: 0,
         avgLossPercent: 0,
-        // New learning stats
         tokensTracked: 0,
         pumps: 0,
         dumps: 0,
@@ -42,17 +41,17 @@ class TradingBrain {
     };
     this.activeVirtualPositions = new Map();
     this.seenTokens = new Set();
+    this.lastSeenClear = Date.now();
     this.dataBuffer = [];
-    this.bufferFlushSize = 10; // Flush more frequently
+    this.bufferFlushSize = 5; // Flush even more frequently
     
-    // Price tracking for learning outcomes
+    // Price tracking - multiple time windows
     this.trackedTokens = new Map();
-    this.maxTrackedTokens = 500;
-    this.trackDuration = 10 * 60 * 1000; // 10 minutes for faster learning
+    this.maxTrackedTokens = 200;
     
     // Recent analyses for dashboard display
     this.recentAnalyses = [];
-    this.maxRecentAnalyses = 50;
+    this.maxRecentAnalyses = 100;
   }
 
   async initialize() {
@@ -81,6 +80,8 @@ class TradingBrain {
     const savedState = await storage.loadModelState();
     if (savedState) {
       this.state = { ...this.state, ...savedState };
+      // ALWAYS allow virtual trading to learn
+      this.state.canVirtualTrade = true;
       console.log(`Loaded state: ${this.state.dataPoints} data points, ${this.state.confidence}% confidence`);
     }
     
@@ -93,10 +94,12 @@ class TradingBrain {
     this.state.virtualTrades = virtualTrades;
     this.calculatePnL();
     
-    // Update capabilities
-    this.updateCapabilities();
+    // FIXED: Start with ability to trade
+    this.state.canVirtualTrade = true;
+    this.state.confidence = Math.max(50, this.state.confidence);
     
     console.log(`Brain initialized. Confidence: ${this.state.confidence}%, Can virtual trade: ${this.state.canVirtualTrade}`);
+    console.log(`Learner accuracy: ${learner.performance.accuracy.toFixed(1)}% from ${learner.performance.totalPredictions} predictions`);
   }
 
   updateCapabilities() {
@@ -414,12 +417,14 @@ class TradingBrain {
     // Track this token to learn outcome later (with deep analysis)
     await this.trackToken(enrichedData, combinedAnalysis);
 
-    // VERBOSE LOGGING - Show what the AI is thinking
-    const shouldTrade = this.shouldTradeAdvanced(combinedAnalysis);
+    // Build signals for learner
+    const tokenSignals = { marketCap: enrichedData.usd_market_cap, liquidity: enrichedData.virtual_sol_reserves, buyPressure: enrichedData.buyPressure || 50, holders: enrichedData.holders, priceChange1h: enrichedData.priceChange1h || 0 };
+    const shouldTrade = this.shouldTradeAdvanced(combinedAnalysis, tokenSignals);
+    const learnerScore = learner.calculateWeightedScore(tokenSignals);
     const aiVotes = aiConsensus ? `${aiConsensus.votes?.buy || 0}B/${aiConsensus.votes?.sell || 0}S/${aiConsensus.votes?.hold || 0}H` : 'N/A';
     const topFlags = combinedAnalysis.flags?.slice(0, 3).join(', ') || 'none';
     
-    console.log(`[ANALYZE] ${enrichedData.symbol} | $${(marketCap/1000).toFixed(0)}k mcap | Score: ${combinedAnalysis.advancedScore || 0} | AI: ${aiVotes} | ${combinedAnalysis.advancedRecommendation || 'HOLD'} | ${shouldTrade ? 'TRADE' : 'SKIP'} | Flags: ${topFlags}`);
+    console.log(`[ANALYZE] ${enrichedData.symbol} | $${(marketCap/1000).toFixed(0)}k | Score: ${combinedAnalysis.advancedScore || 0} | AI: ${aiVotes} | ${combinedAnalysis.advancedRecommendation || 'HOLD'} | ${shouldTrade ? 'TRADE' : 'SKIP'} | Flags: ${topFlags}`);
 
 
     // Store for dashboard display
@@ -452,44 +457,43 @@ class TradingBrain {
     };
   }
 
-  shouldTradeAdvanced(analysis) {
+  shouldTradeAdvanced(analysis, tokenSignals = null) {
     if (!analysis) return false;
     
-    // WALLET RISK CHECK - Don't trade if wallet risk is too high
-    if (analysis.walletRisk > 80) return false;
-    if (analysis.hasClusterRisk) return false;
+    // CRITICAL: Use learner's prediction if we have enough data
+    if (tokenSignals && learner.performance.totalPredictions >= 20) {
+      const learnerPredicts = learner.predictPump(tokenSignals);
+      const learnerScore = learner.calculateWeightedScore(tokenSignals);
+      
+      // If learner is confident (high score), trust it
+      if (learnerScore >= 70 && learnerPredicts) {
+        console.log(`[LEARNER] Predicts PUMP with score ${learnerScore.toFixed(0)}`);
+        return true;
+      }
+      if (learnerScore <= 30) {
+        console.log(`[LEARNER] Predicts DUMP with score ${learnerScore.toFixed(0)}`);
+        return false;
+      }
+    }
     
-    // SECURITY CHECK - Don't trade if security risk is too high
-    if (analysis.securityRisk > 80) return false;
-    
-    // AI CONSENSUS CHECK - Don't trade if AIs say SELL
-    if (analysis.aiSignal === 'SELL' && analysis.aiAgreement > 60) return false;
-    
-    // Use advanced score
-    const score = analysis.advancedScore || analysis.confidence || 0;
+    // Fallback to analysis-based decision
+    const score = analysis.advancedScore || analysis.confidence || 50;
     const rec = analysis.advancedRecommendation || analysis.recommendation;
     
+    // Simple rules - don't overthink it
     if (rec === 'AVOID') return false;
+    if (rec === 'STRONG_BUY') return true;
+    if (rec === 'BUY' && score >= 55) return true;
     
-    // Check multi-timeframe alignment
-    if (analysis.multiTimeframe?.allBearish) return false;
+    // AI consensus as tiebreaker
+    if (analysis.aiSignal === 'BUY' && analysis.aiAgreement >= 60) return true;
+    if (analysis.aiSignal === 'SELL' && analysis.aiAgreement >= 60) return false;
     
-    // Risk profile thresholds
-    const minScore = this.state.riskProfile === 'low' ? 70 : 
-                     this.state.riskProfile === 'medium' ? 60 : 50;
-    
-    // Boost threshold if smart wallet is buying
-    let adjustedMin = analysis.smartWalletBuying ? minScore - 5 : minScore;
-    
-    // Further boost if profitable wallets are holding
-    if (analysis.smartWalletsHolding > 2) adjustedMin -= 5;
-    
-    return score >= adjustedMin && (rec === 'BUY' || rec === 'STRONG_BUY');
+    return score >= 60;
   }
 
-  shouldTrade(analysis) {
-    // Fallback to old method if no advanced analysis
-    return this.shouldTradeAdvanced(analysis);
+  shouldTrade(analysis, tokenSignals = null) {
+    return this.shouldTradeAdvanced(analysis, tokenSignals);
   }
 
   // Execute virtual trade with dynamic exits
@@ -884,10 +888,10 @@ class TradingBrain {
         
         // Classify outcome - 20% threshold for pump/dump
         let outcome;
-        if (pnlPercent >= 20) {
+        if (pnlPercent >= 15) {
           outcome = 'pump';
           this.state.stats.pumps++;
-        } else if (pnlPercent <= -20) {
+        } else if (pnlPercent <= -15) {
           outcome = 'dump';
           this.state.stats.dumps++;
         } else {

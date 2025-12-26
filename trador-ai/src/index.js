@@ -201,18 +201,18 @@ async function startBot() {
   
   isRunning = true;
   
-  // Scan every 60s
+  // Scan every 15s for faster reaction
   scanInterval = setInterval(scanLoop, config.scanInterval);
   scanLoop();
   
-  // Update positions every 10s
+  // Update positions every 5s
   positionInterval = setInterval(() => brain.updateVirtualPositions(), config.priceUpdateInterval);
   
-  // Check tracked token outcomes every 2 minutes
-  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 120000);
+  // Check tracked token outcomes every 30 seconds (multiple windows)
+  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 30000);
   
-  // Pattern analysis every 30min
-  patternInterval = setInterval(() => brain.analyzePatterns(), 1800000);
+  // Pattern analysis every 15min
+  patternInterval = setInterval(() => brain.analyzePatterns(), 900000);
   
   // Idle analysis every 5min when no active trades
   idleInterval = setInterval(() => {

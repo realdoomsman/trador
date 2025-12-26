@@ -24,13 +24,9 @@ export default {
   birdeyeApiKey: process.env.BIRDEYE_API_KEY,
   
   // Helius - Rate Limits based on plan
-  // FREE: 10 RPS, 100k credits/day
-  // DEVELOPER: 50 RPS, 500k credits/day  
-  // BUSINESS: 200 RPS, 2M credits/day
-  // PROFESSIONAL: 500 RPS, 5M credits/day
   heliusApiKey: process.env.HELIUS_API_KEY,
   heliusRpcUrl: process.env.HELIUS_RPC_URL || `https://mainnet.helius-rpc.com/?api-key=${process.env.HELIUS_API_KEY}`,
-  heliusPlan: process.env.HELIUS_PLAN || 'free', // free, developer, business, professional
+  heliusPlan: process.env.HELIUS_PLAN || 'free',
   heliusRateLimits: {
     free: { rps: 10, dailyCredits: 100000 },
     developer: { rps: 50, dailyCredits: 500000 },
@@ -47,47 +43,52 @@ export default {
   
   // GPU Settings
   useGpu: process.env.USE_GPU === 'true',
-  gpuWorkers: parseInt(process.env.GPU_WORKERS) || 4, // L4 has good parallelism
+  gpuWorkers: parseInt(process.env.GPU_WORKERS) || 4,
   
-  // AI Confidence Thresholds
-  minConfidenceVirtual: parseInt(process.env.MIN_CONFIDENCE_FOR_VIRTUAL) || 60,
-  minConfidenceLive: parseInt(process.env.MIN_CONFIDENCE_FOR_LIVE) || 85,
+  // FIXED: Lower confidence thresholds to break the loop
+  minConfidenceVirtual: 30,  // Was 60 - too high, nothing could trade
+  minConfidenceLive: 70,     // Was 85
   
   // Risk Profiles
   riskProfiles: {
     low: {
-      maxPositionSize: 0.02,    // 2% of portfolio
-      stopLoss: 0.05,           // 5% stop loss
-      takeProfit: 0.10,         // 10% take profit
-      maxDailyTrades: 3,
-      minMarketCap: 100000,     // $100k minimum
-      maxMarketCap: 5000000,    // $5M maximum
+      maxPositionSize: 0.02,
+      stopLoss: 0.05,
+      takeProfit: 0.10,
+      maxDailyTrades: 5,
+      minMarketCap: 50000,
+      maxMarketCap: 5000000,
     },
     medium: {
-      maxPositionSize: 0.05,    // 5% of portfolio
-      stopLoss: 0.10,           // 10% stop loss
-      takeProfit: 0.25,         // 25% take profit
-      maxDailyTrades: 8,
-      minMarketCap: 25000,      // $25k minimum
-      maxMarketCap: 2000000,    // $2M maximum
+      maxPositionSize: 0.05,
+      stopLoss: 0.10,
+      takeProfit: 0.25,
+      maxDailyTrades: 15,
+      minMarketCap: 10000,
+      maxMarketCap: 2000000,
     },
     high: {
-      maxPositionSize: 0.10,    // 10% of portfolio
-      stopLoss: 0.20,           // 20% stop loss
-      takeProfit: 0.50,         // 50% take profit
-      maxDailyTrades: 15,
-      minMarketCap: 5000,       // $5k minimum
-      maxMarketCap: 500000,     // $500k maximum
+      maxPositionSize: 0.10,
+      stopLoss: 0.20,
+      takeProfit: 0.50,
+      maxDailyTrades: 30,
+      minMarketCap: 5000,
+      maxMarketCap: 1000000,
     }
   },
   
-  // Data collection intervals (optimized for Birdeye Standard - 500 req/min)
-  scanInterval: 20000,          // 20 seconds - faster scanning with Standard plan
-  priceUpdateInterval: 10000,   // 10 seconds
-  analysisInterval: 20000,      // 20 seconds
+  // FIXED: Faster scanning to catch moves
+  scanInterval: 15000,          // 15 seconds - catch moves faster
+  priceUpdateInterval: 5000,    // 5 seconds - track positions faster
+  analysisInterval: 15000,
   
-  // Learning thresholds (lowered for faster iteration)
-  minDataPointsForTraining: 50,
-  minDataPointsForVirtualTrading: 100,
-  confidenceDecayRate: 0.001,   // Decay per hour without new data
+  // FIXED: Multiple outcome check windows
+  outcomeWindows: [3, 5, 10],   // Check at 3, 5, and 10 minutes
+  pumpThreshold: 15,            // 15% = pump (was 20%)
+  dumpThreshold: -15,           // -15% = dump
+  
+  // FIXED: Lower data requirements to start trading sooner
+  minDataPointsForTraining: 20,
+  minDataPointsForVirtualTrading: 30,  // Was 100 - way too high
+  confidenceDecayRate: 0.001,
 };

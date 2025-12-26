@@ -113,54 +113,80 @@ class HeliusService {
     }
   }
 
-  // Get tokens - prioritize Birdeye (paid plan) for more data
+  // Get tokens - COMBINE sources for variety
   async getPumpFunTokens() {
-    // PRIMARY: Use Birdeye (you have paid plan - best data)
+    const allTokens = [];
+    const seenMints = new Set();
+    
+    // SOURCE 1: Birdeye for established tokens with good data
     if (this.birdeyeKey) {
       try {
-        console.log('[TOKEN FETCH] Using Birdeye (paid plan)...');
-        const tokens = await this.getBirdeyeTokens();
-        if (tokens && tokens.length > 0) {
-          this.dataSource = 'birdeye';
-          console.log(`[BIRDEYE] Fetched ${tokens.length} tokens`);
-          return tokens;
+        const birdeyeTokens = await this.getBirdeyeTokens();
+        if (birdeyeTokens?.length > 0) {
+          for (const t of birdeyeTokens) {
+            if (!seenMints.has(t.mint)) {
+              seenMints.add(t.mint);
+              allTokens.push({ ...t, source: 'birdeye' });
+            }
+          }
+          console.log(`[BIRDEYE] Added ${birdeyeTokens.length} tokens`);
         }
-        console.log('[TOKEN FETCH] Birdeye returned 0 tokens');
       } catch (e) {
-        console.error('[TOKEN FETCH] Birdeye failed:', e.message);
+        console.error('[BIRDEYE] Failed:', e.message);
       }
     }
-
-    // BACKUP 1: Try Pump.fun API directly
+    
+    // SOURCE 2: DexScreener for fresh pump.fun tokens
     try {
-      console.log('[TOKEN FETCH] Trying Pump.fun API...');
-      const tokens = await this.getPumpFunCoins();
-      if (tokens && tokens.length > 0) {
-        this.dataSource = 'pumpfun';
-        console.log(`[PUMP.FUN] Fetched ${tokens.length} tokens`);
-        return tokens;
+      const dexTokens = await this.getDexScreenerPumpFunTokens();
+      if (dexTokens?.length > 0) {
+        let added = 0;
+        for (const t of dexTokens) {
+          if (!seenMints.has(t.mint)) {
+            seenMints.add(t.mint);
+            allTokens.push({ ...t, source: 'dexscreener' });
+            added++;
+          }
+        }
+        console.log(`[DEXSCREENER] Added ${added} new tokens`);
       }
     } catch (e) {
-      console.error('[TOKEN FETCH] Pump.fun failed:', e.message);
+      console.error('[DEXSCREENER] Failed:', e.message);
     }
-
-    // BACKUP 2: DexScreener
+    
+    // SOURCE 3: Pump.fun API for newest tokens (often blocked but try)
     try {
-      console.log('[TOKEN FETCH] Trying DexScreener...');
-      const tokens = await this.getDexScreenerPumpFunTokens();
-      if (tokens && tokens.length > 0) {
-        this.dataSource = 'dexscreener';
-        console.log(`[DEXSCREENER] Fetched ${tokens.length} tokens`);
-        return tokens;
+      const pumpTokens = await this.getPumpFunCoins();
+      if (pumpTokens?.length > 0) {
+        let added = 0;
+        for (const t of pumpTokens) {
+          if (!seenMints.has(t.mint)) {
+            seenMints.add(t.mint);
+            allTokens.push({ ...t, source: 'pumpfun' });
+            added++;
+          }
+        }
+        if (added > 0) console.log(`[PUMP.FUN] Added ${added} new tokens`);
       }
     } catch (e) {
-      console.error('[TOKEN FETCH] DexScreener failed:', e.message);
+      // Pump.fun often blocks server requests, ignore
     }
-
-    // Fallback: Generate synthetic training data
-    this.dataSource = 'synthetic';
-    console.log('[SYNTHETIC] All APIs failed, using synthetic data');
-    return this.generateSyntheticTokens(50);
+    
+    if (allTokens.length === 0) {
+      this.dataSource = 'synthetic';
+      console.log('[SYNTHETIC] All APIs failed, using synthetic data');
+      return this.generateSyntheticTokens(50);
+    }
+    
+    // Shuffle to mix sources
+    for (let i = allTokens.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allTokens[i], allTokens[j]] = [allTokens[j], allTokens[i]];
+    }
+    
+    this.dataSource = 'mixed';
+    console.log(`[MIXED] Total ${allTokens.length} unique tokens from multiple sources`);
+    return allTokens;
   }
 
   // Get coins directly from Pump.fun API
