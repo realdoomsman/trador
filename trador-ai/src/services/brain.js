@@ -9,6 +9,7 @@ import walletIntel from './walletIntel.js';
 import multiAI from './multiAI.js';
 import externalTools from './externalTools.js';
 import socialIntel from './socialIntel.js';
+import bondingCurve from './bondingCurve.js';
 
 class TradingBrain {
   constructor() {

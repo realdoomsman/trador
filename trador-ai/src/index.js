@@ -4,6 +4,7 @@ import helius from './services/helius.js';
 import rateLimiter from './services/rateLimiter.js';
 import gpuWorker from './services/gpuWorker.js';
 import alpha from './services/alpha.js';
+import pumpfunWS from './services/pumpfunWS.js';
 import express from 'express';
 import cors from 'cors';
 
@@ -18,6 +19,7 @@ let positionInterval = null;
 let patternInterval = null;
 let idleInterval = null;
 let outcomeInterval = null;
+let wsConnected = false;
 
 // API Endpoints
 app.get('/api/status', (req, res) => {
@@ -29,6 +31,8 @@ app.get('/api/status', (req, res) => {
     rateLimit: rateLimiter.getUsage(),
     dataSource: dataSource,
     isRealData: dataSource !== 'synthetic' && dataSource !== 'none',
+    wsConnected: pumpfunWS.isConnected,
+    wsStats: pumpfunWS.getStats(),
     ...brain.getStatus()
   });
 });
@@ -119,6 +123,15 @@ app.get('/api/social', (req, res) => {
   });
 });
 
+// WebSocket stats for real-time token detection
+app.get('/api/websocket', (req, res) => {
+  res.json({
+    connected: pumpfunWS.isConnected,
+    stats: pumpfunWS.getStats(),
+    recentTokens: pumpfunWS.getRecentTokens(60000) // Last 1 minute
+  });
+});
+
 // Recent token analyses for live feed
 app.get('/api/recent', (req, res) => {
   res.json(brain.recentAnalyses || []);
@@ -199,16 +212,50 @@ async function startBot() {
   await gpuWorker.initialize();
   await brain.initialize();
   
+  // Connect WebSocket for real-time token detection
+  try {
+    wsConnected = await pumpfunWS.connectHelius();
+    if (wsConnected) {
+      console.log('[WS] Real-time token detection enabled');
+      
+      // Handle new tokens from WebSocket
+      pumpfunWS.onNewToken = async (mint, signature) => {
+        console.log(`[WS-NEW] Detected new token: ${mint}`);
+        try {
+          // Fetch token data and analyze immediately
+          const tokenData = await helius.getPumpFunToken(mint);
+          if (tokenData) {
+            const result = await brain.analyzeToken({
+              ...tokenData,
+              source: 'websocket',
+              isPumpFun: true,
+              isNewLaunch: true
+            });
+            
+            if (result?.shouldTrade && brain.state.canVirtualTrade) {
+              console.log(`[WS-TRADE] New token ${tokenData.symbol} triggered trade signal!`);
+              await brain.executeVirtualTrade(result.token, result.analysis);
+            }
+          }
+        } catch (err) {
+          console.error('[WS] Error processing new token:', err.message);
+        }
+      };
+    }
+  } catch (err) {
+    console.log('[WS] WebSocket connection failed, using polling only:', err.message);
+  }
+  
   isRunning = true;
   
-  // Scan every 15s for faster reaction
+  // Scan every 15s for faster reaction (fallback/supplement to WebSocket)
   scanInterval = setInterval(scanLoop, config.scanInterval);
   scanLoop();
   
   // Update positions every 5s
   positionInterval = setInterval(() => brain.updateVirtualPositions(), config.priceUpdateInterval);
   
-  // Check tracked token outcomes every 30 seconds (multiple windows)
+  // Check tracked token outcomes every 30 seconds (multiple windows: 3, 5, 10 min)
   outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 30000);
   
   // Pattern analysis every 15min
@@ -220,12 +267,14 @@ async function startBot() {
     if (isIdle) idleAnalysis();
   }, 300000);
   
-  console.log(`TRADOR AI started | GPU: ${gpuWorker.getStatus().mode} | Plan: ${config.heliusPlan}`);
+  const wsStatus = wsConnected ? 'REAL-TIME' : 'POLLING';
+  console.log(`TRADOR AI started | GPU: ${gpuWorker.getStatus().mode} | Mode: ${wsStatus} | Plan: ${config.heliusPlan}`);
 }
 
 function stopBot() {
   isRunning = false;
   [scanInterval, positionInterval, patternInterval, idleInterval, outcomeInterval].forEach(i => clearInterval(i));
+  pumpfunWS.disconnect();
   brain.flushDataBuffer();
   brain.saveState();
   console.log('TRADOR AI stopped');

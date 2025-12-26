@@ -224,6 +224,7 @@ class HeliusService {
               priceChange24h: 0,
               usd_market_cap: coin.usd_market_cap || 0,
               virtual_sol_reserves: coin.virtual_sol_reserves || 0,
+              virtual_token_reserves: coin.virtual_token_reserves || 0,
               holder_count: 0,
               volume24h: 0,
               txns24h: 0,
@@ -240,7 +241,10 @@ class HeliusService {
               telegram: coin.telegram,
               website: coin.website,
               complete: coin.complete, // Has it graduated from bonding curve?
-              kingOfTheHillTimestamp: coin.king_of_the_hill_timestamp
+              kingOfTheHillTimestamp: coin.king_of_the_hill_timestamp,
+              // Bonding curve progress (0-100%)
+              bondingCurveProgress: coin.virtual_sol_reserves ? 
+                Math.min(100, (coin.virtual_sol_reserves / 1e9 / 85) * 100) : 0
             });
           }
         }

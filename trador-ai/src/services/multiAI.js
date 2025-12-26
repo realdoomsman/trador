@@ -262,33 +262,101 @@ REASONING: [one sentence]`;
     return result;
   }
 
-  // GET MULTI-AI CONSENSUS
+  // GET MULTI-AI CONSENSUS - WITH RACE/THRESHOLD LOGIC
+  // Don't wait for all AIs - if fast ones agree with high confidence, execute immediately
   async getConsensus(tokenData, context) {
     const analyses = [];
+    const startTime = Date.now();
     
-    // Run all available AIs in parallel
-    const promises = [];
+    // FAST AIs first (Groq ~200ms, Gemini ~500ms)
+    // SLOW AIs second (Claude ~1-2s, OpenAI ~1-2s)
+    const fastAIs = [];
+    const slowAIs = [];
     
-    if (this.geminiKey) {
-      promises.push(this.analyzeWithGemini(tokenData, context).then(r => r && analyses.push(r)));
-    }
-    if (this.openaiKey) {
-      promises.push(this.analyzeWithOpenAI(tokenData, context).then(r => r && analyses.push(r)));
-    }
-    if (this.claudeKey) {
-      promises.push(this.analyzeWithClaude(tokenData, context).then(r => r && analyses.push(r)));
-    }
-    if (this.groqKey) {
-      promises.push(this.analyzeWithGroq(tokenData, context).then(r => r && analyses.push(r)));
+    if (this.groqKey) fastAIs.push(() => this.analyzeWithGroq(tokenData, context));
+    if (this.geminiKey) fastAIs.push(() => this.analyzeWithGemini(tokenData, context));
+    if (this.claudeKey) slowAIs.push(() => this.analyzeWithClaude(tokenData, context));
+    if (this.openaiKey) slowAIs.push(() => this.analyzeWithOpenAI(tokenData, context));
+    
+    // PHASE 1: Race fast AIs with 1.5s timeout
+    if (fastAIs.length > 0) {
+      const fastPromises = fastAIs.map(fn => 
+        Promise.race([
+          fn(),
+          new Promise(resolve => setTimeout(() => resolve(null), 1500))
+        ])
+      );
+      
+      const fastResults = await Promise.allSettled(fastPromises);
+      for (const result of fastResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          analyses.push(result.value);
+        }
+      }
+      
+      // EARLY EXIT: If 2+ fast AIs agree with high confidence, skip slow AIs
+      if (analyses.length >= 2) {
+        const earlyConsensus = this.checkEarlyConsensus(analyses);
+        if (earlyConsensus) {
+          console.log(`[AI-RACE] Early consensus: ${earlyConsensus.consensus} (${Date.now() - startTime}ms)`);
+          return this.buildConsensusResult(analyses, tokenData, true);
+        }
+      }
     }
     
-    await Promise.allSettled(promises);
+    // PHASE 2: Run slow AIs with 3s timeout (only if no early consensus)
+    if (slowAIs.length > 0) {
+      const slowPromises = slowAIs.map(fn =>
+        Promise.race([
+          fn(),
+          new Promise(resolve => setTimeout(() => resolve(null), 3000))
+        ])
+      );
+      
+      const slowResults = await Promise.allSettled(slowPromises);
+      for (const result of slowResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          analyses.push(result.value);
+        }
+      }
+    }
     
+    console.log(`[AI-RACE] Full consensus: ${analyses.length} AIs (${Date.now() - startTime}ms)`);
+    return this.buildConsensusResult(analyses, tokenData, false);
+  }
+
+  // Check if fast AIs have strong agreement (for early exit)
+  checkEarlyConsensus(analyses) {
+    if (analyses.length < 2) return null;
+    
+    const buyVotes = analyses.filter(a => a.signal === 'BUY');
+    const sellVotes = analyses.filter(a => a.signal === 'SELL');
+    
+    // Both fast AIs say BUY with 80%+ confidence
+    if (buyVotes.length >= 2) {
+      const avgConf = buyVotes.reduce((s, a) => s + a.confidence, 0) / buyVotes.length;
+      if (avgConf >= 80) return { consensus: 'BUY', confidence: avgConf };
+    }
+    
+    // Both fast AIs say SELL with 80%+ confidence
+    if (sellVotes.length >= 2) {
+      const avgConf = sellVotes.reduce((s, a) => s + a.confidence, 0) / sellVotes.length;
+      if (avgConf >= 80) return { consensus: 'SELL', confidence: avgConf };
+    }
+    
+    // One says STRONG BUY (90%+ confidence)
+    const strongBuy = analyses.find(a => a.signal === 'BUY' && a.confidence >= 90);
+    if (strongBuy) return { consensus: 'BUY', confidence: strongBuy.confidence };
+    
+    return null;
+  }
+
+  // Build final consensus result
+  buildConsensusResult(analyses, tokenData, wasEarlyExit) {
     if (analyses.length === 0) {
-      return { consensus: 'HOLD', confidence: 0, analyses: [], agreement: 0 };
+      return { consensus: 'HOLD', confidence: 0, analyses: [], agreement: 0, wasEarlyExit: false };
     }
 
-    // Calculate consensus
     const buyVotes = analyses.filter(a => a.signal === 'BUY').length;
     const sellVotes = analyses.filter(a => a.signal === 'SELL').length;
     const holdVotes = analyses.filter(a => a.signal === 'HOLD').length;
@@ -297,14 +365,9 @@ REASONING: [one sentence]`;
     if (buyVotes > sellVotes && buyVotes > holdVotes) consensus = 'BUY';
     if (sellVotes > buyVotes && sellVotes > holdVotes) consensus = 'SELL';
     
-    // Calculate agreement percentage
     const maxVotes = Math.max(buyVotes, sellVotes, holdVotes);
     const agreement = (maxVotes / analyses.length) * 100;
-    
-    // Average confidence
     const avgConfidence = analyses.reduce((sum, a) => sum + a.confidence, 0) / analyses.length;
-    
-    // Weighted confidence (higher if more agreement)
     const weightedConfidence = avgConfidence * (agreement / 100);
 
     const result = {
@@ -314,17 +377,17 @@ REASONING: [one sentence]`;
       agreement: Math.round(agreement),
       votes: { buy: buyVotes, sell: sellVotes, hold: holdVotes },
       analyses,
-      aiCount: analyses.length
+      aiCount: analyses.length,
+      wasEarlyExit
     };
 
-    // Track consensus history
+    // Track history
     this.consensusHistory.push({
       token: tokenData.symbol,
       ...result,
       timestamp: Date.now()
     });
     
-    // Keep last 100
     if (this.consensusHistory.length > 100) {
       this.consensusHistory = this.consensusHistory.slice(-100);
     }

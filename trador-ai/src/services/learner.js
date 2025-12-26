@@ -18,7 +18,11 @@ class SelfLearner {
       uniqueWallets24h: 1.0,
       isBuyHeavy: 1.0,
       hasWhaleInterest: 1.0,
-      isLpBurned: 1.0
+      isLpBurned: 1.0,
+      // NEW: Bonding curve signals
+      bondingCurveProgress: 1.0,
+      isNearGraduation: 1.0,
+      tokenAge: 1.0
     };
     
     this.thresholds = {
@@ -168,6 +172,28 @@ class SelfLearner {
     // LP burned
     if (signals.isLpBurned) score += 5 * this.weights.isLpBurned;
     totalWeight += this.weights.isLpBurned;
+
+    // NEW: Bonding curve progress (75-85% = graduation frenzy zone)
+    const bcProgress = signals.bondingCurveProgress || 0;
+    if (bcProgress >= 75 && bcProgress < 85) {
+      score += 15 * this.weights.bondingCurveProgress; // Graduation frenzy!
+    } else if (bcProgress >= 60 && bcProgress < 75) {
+      score += 8 * this.weights.bondingCurveProgress;
+    } else if (bcProgress < 20) {
+      score += 3 * this.weights.bondingCurveProgress; // Very early, risky but potential
+    }
+    totalWeight += this.weights.bondingCurveProgress;
+
+    // Token age (newer = more volatile = higher potential)
+    const ageMinutes = signals.tokenAge || signals.ageMinutes || 60;
+    if (ageMinutes < 5) {
+      score += 10 * this.weights.tokenAge; // Brand new
+    } else if (ageMinutes < 15) {
+      score += 5 * this.weights.tokenAge;
+    } else if (ageMinutes > 60) {
+      score -= 5 * this.weights.tokenAge; // Old token, less likely to pump
+    }
+    totalWeight += this.weights.tokenAge;
 
     // Normalize
     return Math.max(0, Math.min(100, score));
