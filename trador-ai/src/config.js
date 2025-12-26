@@ -78,17 +78,33 @@ export default {
   },
   
   // FIXED: Faster scanning to catch moves
-  scanInterval: 15000,          // 15 seconds - catch moves faster
+  scanInterval: 15000,          // 15 seconds - main scan loop
+  fastPollInterval: 3000,       // 3 seconds - fast poll for new pump.fun tokens
   priceUpdateInterval: 5000,    // 5 seconds - track positions faster
   analysisInterval: 15000,
+  outcomeCheckInterval: 30000,  // 30 seconds - check outcomes more frequently
   
-  // FIXED: Multiple outcome check windows
+  // FIXED: Multiple outcome check windows (in minutes)
   outcomeWindows: [3, 5, 10],   // Check at 3, 5, and 10 minutes
-  pumpThreshold: 15,            // 15% = pump (was 20%)
-  dumpThreshold: -15,           // -15% = dump
+  pumpThreshold: 10,            // 10% = pump (lowered from 15%)
+  microPumpThreshold: 5,        // 5-10% = micro-pump
+  dumpThreshold: -10,           // -10% = dump (lowered from -15%)
+  
+  // MFE/MAE thresholds
+  mfePumpThreshold: 15,         // 15% MFE at any point = PUMP
+  maeDumpThreshold: -10,        // 10% MAE before pump = DUMP
+  
+  // Token tracking
+  maxTrackedTokens: 800,        // Increased from 300 to 800
+  maxTrackTimeMinutes: 10,      // Max tracking time
+  tokensPerScan: 100,           // Increased from 35 to 100
   
   // FIXED: Lower data requirements to start trading sooner
   minDataPointsForTraining: 20,
   minDataPointsForVirtualTrading: 30,  // Was 100 - way too high
   confidenceDecayRate: 0.001,
+  
+  // Learner settings
+  learnerMinSamples: 10,        // Start adjusting weights after 10 outcomes (was 20)
+  learnerUseScoreAfter: 50,     // Use learner score after 50 data points
 };

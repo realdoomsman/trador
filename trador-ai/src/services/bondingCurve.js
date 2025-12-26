@@ -1,5 +1,6 @@
 // BONDING CURVE PRICE CALCULATOR
 // Calculates exact prices from Pump.fun's constant product formula: x * y = k
+// Now with VELOCITY TRACKING for detecting momentum
 
 class BondingCurveCalculator {
   constructor() {
@@ -11,6 +12,11 @@ class BondingCurveCalculator {
     // Graduation threshold (when token moves to Raydium)
     this.GRADUATION_THRESHOLD = 0.8; // 80% of bonding curve filled
     this.GRADUATION_SOL = 85; // ~85 SOL to graduate
+    
+    // VELOCITY TRACKING - Store progress history for each token
+    this.progressHistory = new Map(); // mint -> [{progress, timestamp}, ...]
+    this.maxHistoryLength = 20; // Keep last 20 data points per token
+    this.velocityWindow = 60000; // 60 seconds for velocity calculation
   }
 
   // Calculate current price from reserves using constant product formula
@@ -235,6 +241,158 @@ class BondingCurveCalculator {
       bondingCurve: coinData.bonding_curve,
       associatedBondingCurve: coinData.associated_bonding_curve
     };
+  }
+
+  // VELOCITY TRACKING - Record progress and calculate velocity
+  recordProgress(mint, virtualSolReserves) {
+    const progress = this.calculateProgress(virtualSolReserves);
+    const now = Date.now();
+    
+    if (!this.progressHistory.has(mint)) {
+      this.progressHistory.set(mint, []);
+    }
+    
+    const history = this.progressHistory.get(mint);
+    history.push({ progress, timestamp: now });
+    
+    // Keep only recent history
+    while (history.length > this.maxHistoryLength) {
+      history.shift();
+    }
+    
+    return progress;
+  }
+
+  // Calculate velocity (progress change per minute)
+  calculateVelocity(mint) {
+    const history = this.progressHistory.get(mint);
+    if (!history || history.length < 2) return 0;
+    
+    const now = Date.now();
+    const windowStart = now - this.velocityWindow;
+    
+    // Get data points within the velocity window
+    const recentPoints = history.filter(p => p.timestamp >= windowStart);
+    if (recentPoints.length < 2) {
+      // Use all available points if not enough in window
+      if (history.length < 2) return 0;
+      const oldest = history[0];
+      const newest = history[history.length - 1];
+      const timeDiffMinutes = (newest.timestamp - oldest.timestamp) / 60000;
+      if (timeDiffMinutes <= 0) return 0;
+      return (newest.progress - oldest.progress) / timeDiffMinutes;
+    }
+    
+    const oldest = recentPoints[0];
+    const newest = recentPoints[recentPoints.length - 1];
+    const timeDiffMinutes = (newest.timestamp - oldest.timestamp) / 60000;
+    
+    if (timeDiffMinutes <= 0) return 0;
+    
+    // Progress change per minute
+    return (newest.progress - oldest.progress) / timeDiffMinutes;
+  }
+
+  // Get full velocity analysis for a token
+  getVelocityAnalysis(mint, virtualSolReserves) {
+    // Record current progress
+    const progress = this.recordProgress(mint, virtualSolReserves);
+    const velocity = this.calculateVelocity(mint);
+    
+    // Classify velocity
+    let velocityClass = 'stable';
+    if (velocity > 5) velocityClass = 'accelerating_fast';
+    else if (velocity > 2) velocityClass = 'accelerating';
+    else if (velocity > 0.5) velocityClass = 'growing';
+    else if (velocity < -2) velocityClass = 'declining_fast';
+    else if (velocity < -0.5) velocityClass = 'declining';
+    
+    // Estimate time to graduation
+    const progressRemaining = 100 - progress;
+    const estimatedMinutesToGraduation = velocity > 0.1 ? progressRemaining / velocity : null;
+    
+    // Is this in the "graduation frenzy" zone with momentum?
+    const isGraduationFrenzy = progress >= 60 && progress < 85 && velocity > 1;
+    
+    // Is this a good entry point?
+    const isGoodEntry = (
+      (progress >= 60 && progress < 85 && velocity > 0.5) || // Graduation zone with momentum
+      (progress >= 40 && progress < 60 && velocity > 2) ||   // Mid-stage with strong momentum
+      (progress < 30 && velocity > 3)                         // Early with very strong momentum
+    );
+    
+    return {
+      progress,
+      velocity,
+      velocityClass,
+      estimatedMinutesToGraduation,
+      isGraduationFrenzy,
+      isGoodEntry,
+      historyLength: this.progressHistory.get(mint)?.length || 0,
+      signals: this.generateVelocitySignals(progress, velocity)
+    };
+  }
+
+  // Generate velocity-based signals
+  generateVelocitySignals(progress, velocity) {
+    const signals = [];
+    
+    // Graduation frenzy with momentum
+    if (progress >= 75 && progress < 85 && velocity > 1) {
+      signals.push({
+        type: 'GRADUATION_FRENZY_MOMENTUM',
+        strength: 'VERY_HIGH',
+        message: 'Near graduation with strong buying momentum'
+      });
+    }
+    
+    // Strong acceleration
+    if (velocity > 5) {
+      signals.push({
+        type: 'RAPID_ACCELERATION',
+        strength: 'HIGH',
+        message: `Progress accelerating at ${velocity.toFixed(1)}%/min`
+      });
+    }
+    
+    // Slowing down near graduation (potential top)
+    if (progress >= 70 && velocity < 0.5 && velocity > -0.5) {
+      signals.push({
+        type: 'MOMENTUM_STALLING',
+        strength: 'WARNING',
+        message: 'Momentum stalling near graduation'
+      });
+    }
+    
+    // Declining (selling pressure)
+    if (velocity < -1) {
+      signals.push({
+        type: 'SELLING_PRESSURE',
+        strength: 'WARNING',
+        message: `Progress declining at ${Math.abs(velocity).toFixed(1)}%/min`
+      });
+    }
+    
+    // Early stage with momentum
+    if (progress < 30 && velocity > 2) {
+      signals.push({
+        type: 'EARLY_MOMENTUM',
+        strength: 'MEDIUM',
+        message: 'Early stage with strong momentum building'
+      });
+    }
+    
+    return signals;
+  }
+
+  // Clean up old history entries
+  cleanupHistory(maxAge = 3600000) { // 1 hour default
+    const now = Date.now();
+    for (const [mint, history] of this.progressHistory) {
+      if (history.length === 0 || now - history[history.length - 1].timestamp > maxAge) {
+        this.progressHistory.delete(mint);
+      }
+    }
   }
 }
 

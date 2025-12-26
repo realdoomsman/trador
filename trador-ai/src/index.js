@@ -15,11 +15,17 @@ app.use(express.json());
 let isRunning = false;
 let isIdle = false;
 let scanInterval = null;
+let fastPollInterval = null;
 let positionInterval = null;
 let patternInterval = null;
 let idleInterval = null;
 let outcomeInterval = null;
+let priceTrackInterval = null;
 let wsConnected = false;
+
+// Track recently seen tokens for fast poll deduplication
+const fastPollSeen = new Set();
+let lastFastPollClear = Date.now();
 
 // API Endpoints
 app.get('/api/status', (req, res) => {
@@ -162,9 +168,9 @@ async function scanLoop() {
       console.log(`Market regime: ${regime.regime.toUpperCase()} - ${regime.recommendation.message}`);
     }
     
-    // Use GPU parallel processing if available
+    // Use GPU parallel processing if available - scan more tokens (100 instead of 35)
     const results = await gpuWorker.processParallel(
-      tokens.slice(0, 35), // Scan 35 tokens per batch with Birdeye Starter
+      tokens.slice(0, config.tokensPerScan || 100),
       async (token) => {
         await rateLimiter.throttle();
         return brain.analyzeToken(token);
@@ -189,6 +195,88 @@ async function scanLoop() {
     
   } catch (err) {
     console.error('Scan error:', err.message);
+  }
+}
+
+// FAST POLL - Check for new pump.fun tokens every 3 seconds
+async function fastPollLoop() {
+  try {
+    // Clear seen tokens every 5 minutes
+    if (Date.now() - lastFastPollClear > 5 * 60 * 1000) {
+      fastPollSeen.clear();
+      lastFastPollClear = Date.now();
+    }
+    
+    // Fetch newest pump.fun tokens from DexScreener
+    const res = await fetch('https://api.dexscreener.com/latest/dex/search?q=pump.fun', {
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    if (!res.ok) return;
+    
+    const data = await res.json();
+    if (!data.pairs) return;
+    
+    // Filter to only Solana pump.fun pairs, sorted by creation time
+    const pumpFunPairs = data.pairs
+      .filter(pair => 
+        pair.chainId === 'solana' && 
+        (pair.dexId === 'pumpfun' || pair.url?.includes('pump.fun'))
+      )
+      .sort((a, b) => (b.pairCreatedAt || 0) - (a.pairCreatedAt || 0))
+      .slice(0, 20); // Top 20 newest
+    
+    let newCount = 0;
+    for (const pair of pumpFunPairs) {
+      const mint = pair.baseToken?.address;
+      if (!mint || fastPollSeen.has(mint)) continue;
+      
+      // Check if this is a truly new token (< 5 minutes old)
+      const ageMinutes = pair.pairCreatedAt ? (Date.now() - pair.pairCreatedAt) / 60000 : 999;
+      if (ageMinutes > 5) continue; // Skip tokens older than 5 minutes
+      
+      fastPollSeen.add(mint);
+      newCount++;
+      
+      // Format token data
+      const tokenData = {
+        mint,
+        symbol: pair.baseToken?.symbol || 'UNKNOWN',
+        name: pair.baseToken?.name || 'Unknown Token',
+        usd_market_cap: pair.marketCap || pair.fdv || 0,
+        virtual_sol_reserves: pair.liquidity?.usd ? pair.liquidity.usd / 200 : 0,
+        holder_count: 100,
+        created_timestamp: new Date(pair.pairCreatedAt || Date.now()).toISOString(),
+        price: parseFloat(pair.priceUsd) || 0,
+        volume24h: pair.volume?.h24 || 0,
+        priceChange24h: pair.priceChange?.h24 || 0,
+        txns24h: (pair.txns?.h24?.buys || 0) + (pair.txns?.h24?.sells || 0),
+        source: 'fastpoll-dexscreener',
+        isPumpFun: true,
+        isNewLaunch: true,
+        ageMinutes
+      };
+      
+      console.log(`[FAST-POLL] New token: ${tokenData.symbol} (${ageMinutes.toFixed(1)}min old, $${(tokenData.usd_market_cap/1000).toFixed(0)}k mcap)`);
+      
+      // Analyze immediately
+      try {
+        const result = await brain.analyzeToken(tokenData);
+        if (result?.shouldTrade && brain.state.canVirtualTrade) {
+          console.log(`[FAST-POLL] ${tokenData.symbol} triggered trade signal!`);
+          await brain.executeVirtualTrade(result.token, result.analysis);
+        }
+      } catch (err) {
+        console.error(`[FAST-POLL] Error analyzing ${tokenData.symbol}:`, err.message);
+      }
+    }
+    
+    if (newCount > 0) {
+      console.log(`[FAST-POLL] Found ${newCount} new tokens`);
+    }
+    
+  } catch (err) {
+    // Silent fail for fast poll
   }
 }
 
@@ -249,17 +337,21 @@ async function startBot() {
   isRunning = true;
   
   // CRITICAL: Update tracked token prices every 5 seconds for MFE/MAE tracking
-  const priceTrackInterval = setInterval(() => brain.updateTrackedPrices(), 5000);
+  priceTrackInterval = setInterval(() => brain.updateTrackedPrices(), 5000);
   
-  // Scan every 15s for faster reaction (fallback/supplement to WebSocket)
+  // FAST POLL: Check for new pump.fun tokens every 3 seconds
+  fastPollInterval = setInterval(fastPollLoop, config.fastPollInterval || 3000);
+  console.log('[FAST-POLL] Started - checking for new tokens every 3s');
+  
+  // Main scan every 15s (fallback/supplement to WebSocket and fast poll)
   scanInterval = setInterval(scanLoop, config.scanInterval);
   scanLoop();
   
   // Update positions every 5s
   positionInterval = setInterval(() => brain.updateVirtualPositions(), config.priceUpdateInterval);
   
-  // Check tracked token outcomes every 10 seconds (MFE/MAE based)
-  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), 10000);
+  // Check tracked token outcomes every 30 seconds (MFE/MAE based)
+  outcomeInterval = setInterval(() => brain.checkTrackedOutcomes(), config.outcomeCheckInterval || 30000);
   
   // Pattern analysis every 15min
   patternInterval = setInterval(() => brain.analyzePatterns(), 900000);
@@ -272,11 +364,12 @@ async function startBot() {
   
   const wsStatus = wsConnected ? 'REAL-TIME' : 'POLLING';
   console.log(`TRADOR AI started | GPU: ${gpuWorker.getStatus().mode} | Mode: ${wsStatus} | Plan: ${config.heliusPlan}`);
+  console.log(`Config: ${config.tokensPerScan || 100} tokens/scan, ${config.maxTrackedTokens || 800} max tracked, ${config.mfePumpThreshold || 15}% MFE threshold`);
 }
 
 function stopBot() {
   isRunning = false;
-  [scanInterval, positionInterval, patternInterval, idleInterval, outcomeInterval].forEach(i => clearInterval(i));
+  [scanInterval, fastPollInterval, positionInterval, patternInterval, idleInterval, outcomeInterval, priceTrackInterval].forEach(i => clearInterval(i));
   pumpfunWS.disconnect();
   brain.flushDataBuffer();
   brain.saveState();

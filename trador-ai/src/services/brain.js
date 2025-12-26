@@ -54,12 +54,16 @@ class TradingBrain {
     
     // Price tracking with MFE/MAE - continuous monitoring
     this.trackedTokens = new Map();
-    this.maxTrackedTokens = 300;
+    this.maxTrackedTokens = config.maxTrackedTokens || 800;
     
-    // MFE/MAE thresholds
-    this.MFE_PUMP_THRESHOLD = 15;  // 15% gain at any point = PUMP
-    this.MAE_DUMP_THRESHOLD = -10; // 10% loss before pump = DUMP
-    this.MAX_TRACK_TIME = 10 * 60 * 1000; // 10 minutes max tracking
+    // MFE/MAE thresholds from config
+    this.MFE_PUMP_THRESHOLD = config.mfePumpThreshold || 15;  // 15% gain at any point = PUMP
+    this.MAE_DUMP_THRESHOLD = config.maeDumpThreshold || -10; // 10% loss before pump = DUMP
+    this.MICRO_PUMP_THRESHOLD = config.microPumpThreshold || 5; // 5-10% = micro-pump
+    this.MAX_TRACK_TIME = (config.maxTrackTimeMinutes || 10) * 60 * 1000; // Max tracking time
+    
+    // Multi-window outcome checking (3, 5, 10 minutes)
+    this.outcomeWindows = config.outcomeWindows || [3, 5, 10];
     
     // Recent analyses for dashboard display
     this.recentAnalyses = [];
@@ -474,7 +478,9 @@ class TradingBrain {
     if (!analysis) return false;
     
     // CRITICAL: Use learner's prediction if we have enough data
-    if (tokenSignals && learner.performance.totalPredictions >= 20) {
+    // Now uses learner score after just 10 outcomes (was 20)
+    const learnerUseAfter = config.learnerMinSamples || 10;
+    if (tokenSignals && learner.performance.totalPredictions >= learnerUseAfter) {
       const learnerPredicts = learner.predictPump(tokenSignals);
       const learnerScore = learner.calculateWeightedScore(tokenSignals);
       
@@ -925,189 +931,175 @@ class TradingBrain {
     }
   }
 
-  // Check tracked tokens and learn from outcomes - MFE/MAE BASED
+  // Check tracked tokens and learn from outcomes - MFE/MAE BASED with MULTI-WINDOW
   async checkTrackedOutcomes() {
     const now = Date.now();
     const toRemove = [];
-    const readyCount = [...this.trackedTokens.values()].filter(t => now - t.entryTime >= this.trackDuration).length;
-    
-    if (readyCount > 0) {
-      console.log(`[OUTCOME] Checking ${readyCount} tokens ready for outcome learning...`);
-    }
     
     for (const [mint, tracked] of this.trackedTokens) {
-      // Check if tracking period is over
-      if (now - tracked.entryTime < this.trackDuration) continue;
+      const ageMinutes = (now - tracked.entryTime) / 60000;
       
-      try {
-        // Get current price from multiple sources
-        const currentData = await this.getTokenPrice(mint);
-        
-        // Debug: Log price fetch results
-        if (!currentData || !currentData.price) {
-          console.log(`[OUTCOME] No price for ${tracked.symbol} - entry was $${tracked.entryPrice?.toFixed(8) || 'N/A'}`);
+      // Skip if already decided
+      if (tracked.outcomeDecided) {
+        if (now - tracked.entryTime >= this.MAX_TRACK_TIME) {
+          await this.finalizeOutcome(tracked);
           toRemove.push(mint);
-          continue;
         }
-        
-        // Validate entry price
-        if (!tracked.entryPrice || tracked.entryPrice <= 0) {
-          console.log(`[OUTCOME] Invalid entry price for ${tracked.symbol}: ${tracked.entryPrice}`);
-          toRemove.push(mint);
-          continue;
-        }
-
-        const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
-        
-        // Debug: Log price comparison
-        console.log(`[OUTCOME] ${tracked.symbol}: $${tracked.entryPrice.toFixed(8)} -> $${currentData.price.toFixed(8)} = ${pnlPercent.toFixed(1)}% (${currentData.source})`);
-        
-        // Classify outcome - 20% threshold for pump/dump
-        let outcome;
-        if (pnlPercent >= 15) {
-          outcome = 'pump';
-          this.state.stats.pumps++;
-        } else if (pnlPercent <= -15) {
-          outcome = 'dump';
-          this.state.stats.dumps++;
-        } else {
-          outcome = 'neutral';
-          this.state.stats.neutral++;
-        }
-
-        // Save learning data with outcome - SUPER DETAILED
-        const learningData = {
-          timestamp: Date.now(),
-          token: tracked.tokenData,
-          entryPrice: tracked.entryPrice,
-          exitPrice: currentData.price,
-          pnlPercent,
-          outcome,
-          holdTimeMinutes: (now - tracked.entryTime) / 60000,
-          analysis: tracked.analysis,
+        continue;
+      }
+      
+      // Check at each window (3, 5, 10 minutes)
+      for (const windowMinutes of this.outcomeWindows) {
+        if (ageMinutes >= windowMinutes && !tracked[`checked_${windowMinutes}min`]) {
+          tracked[`checked_${windowMinutes}min`] = true;
           
-          // PRICE & MOMENTUM SIGNALS
-          priceSignals: {
-            priceChange30m: tracked.tokenData.priceChange30m,
-            priceChange1h: tracked.tokenData.priceChange1h,
-            priceChange4h: tracked.tokenData.priceChange4h,
-            priceChange24h: tracked.tokenData.priceChange24h
-          },
+          const currentData = await this.getTokenPrice(mint);
+          if (!currentData?.price || !tracked.entryPrice) continue;
           
-          // MARKET SIZE SIGNALS
-          marketSignals: {
-            marketCap: tracked.tokenData.marketCap,
-            fdv: tracked.tokenData.fdv,
-            liquidity: tracked.tokenData.liquidity,
-            mcapToLiquidity: tracked.tokenData.liquidity > 0 ? tracked.tokenData.marketCap / tracked.tokenData.liquidity : 0
-          },
+          const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
           
-          // VOLUME SIGNALS
-          volumeSignals: {
-            volume30m: tracked.tokenData.volume30m,
-            volume1h: tracked.tokenData.volume1h,
-            volume24h: tracked.tokenData.volume24h,
-            volumeToMcap: tracked.tokenData.volumeToMcap
-          },
+          // Update MFE/MAE
+          if (!tracked.highestPrice) tracked.highestPrice = tracked.entryPrice;
+          if (!tracked.lowestPrice) tracked.lowestPrice = tracked.entryPrice;
           
-          // TRADING PRESSURE SIGNALS
-          tradingSignals: {
-            buys24h: tracked.tokenData.buys24h,
-            sells24h: tracked.tokenData.sells24h,
-            buyPressure: tracked.tokenData.buyPressure,
-            txns24h: tracked.tokenData.txns24h,
-            buyToSellRatio: tracked.tokenData.sells24h > 0 ? tracked.tokenData.buys24h / tracked.tokenData.sells24h : 1
-          },
-          
-          // HOLDER SIGNALS
-          holderSignals: {
-            holders: tracked.tokenData.holders,
-            uniqueWallets24h: tracked.tokenData.uniqueWallets24h,
-            // Deep holder analysis
-            top1Percent: tracked.holderAnalysis?.top1Percent || null,
-            top5Percent: tracked.holderAnalysis?.top5Percent || null,
-            top10Percent: tracked.holderAnalysis?.top10Percent || null,
-            whaleCount: tracked.holderAnalysis?.whaleCount || null,
-            whalePercent: tracked.holderAnalysis?.whalePercent || null,
-            distributionScore: tracked.holderAnalysis?.distributionScore || null,
-            isHighlyConcentrated: tracked.holderAnalysis?.isHighlyConcentrated || null,
-            hasWhaleRisk: tracked.holderAnalysis?.hasWhaleRisk || null
-          },
-          
-          // SECURITY SIGNALS
-          securitySignals: {
-            isMintable: tracked.securityAnalysis?.isMintable || null,
-            isFreezable: tracked.securityAnalysis?.isFreezable || null,
-            hasMintRisk: tracked.securityAnalysis?.hasMintRisk || null,
-            hasFreezeRisk: tracked.securityAnalysis?.hasFreezeRisk || null,
-            creatorPercentage: tracked.securityAnalysis?.creatorPercentage || null,
-            ownerPercentage: tracked.securityAnalysis?.ownerPercentage || null,
-            lpBurnedPercent: tracked.securityAnalysis?.lpBurnedPercent || null,
-            isLpBurned: tracked.securityAnalysis?.isLpBurned || null,
-            mutableMetadata: tracked.securityAnalysis?.mutableMetadata || null
-          },
-          
-          // RECENT TRADE SIGNALS
-          recentTradeSignals: {
-            buyCount: tracked.recentTrades?.buyCount || null,
-            sellCount: tracked.recentTrades?.sellCount || null,
-            buyRatio: tracked.recentTrades?.buyRatio || null,
-            avgBuySize: tracked.recentTrades?.avgBuySize || null,
-            avgSellSize: tracked.recentTrades?.avgSellSize || null,
-            whaleBuys: tracked.recentTrades?.whaleBuys || null,
-            whaleSells: tracked.recentTrades?.whaleSells || null,
-            uniqueBuyers: tracked.recentTrades?.uniqueBuyers || null,
-            uniqueSellers: tracked.recentTrades?.uniqueSellers || null,
-            isBuyHeavy: tracked.recentTrades?.isBuyHeavy || null,
-            isSellHeavy: tracked.recentTrades?.isSellHeavy || null,
-            hasWhaleInterest: tracked.recentTrades?.hasWhaleInterest || null
-          },
-          
-          // TIME CONTEXT
-          timeSignals: {
-            hour: tracked.tokenData.hour,
-            dayOfWeek: tracked.tokenData.dayOfWeek,
-            isWeekend: tracked.tokenData.dayOfWeek === 0 || tracked.tokenData.dayOfWeek === 6,
-            isUSMarketHours: tracked.tokenData.hour >= 13 && tracked.tokenData.hour <= 21,
-            isAsiaHours: tracked.tokenData.hour >= 0 && tracked.tokenData.hour <= 8
+          if (currentData.price > tracked.highestPrice) {
+            tracked.highestPrice = currentData.price;
+            tracked.mfePercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
           }
-        };
-
-        this.dataBuffer.push(learningData);
-        
-        // SELF-LEARNING: Teach the AI from this outcome
-        const flatSignals = learner.flattenSignals(learningData);
-        await learner.learnFromOutcome(flatSignals, outcome, pnlPercent);
-        await storage.saveOutcome({ signals: flatSignals, outcome, pnlPercent, timestamp: Date.now() });
-        
-        if (outcome === 'pump') {
-          console.log(`LEARNED: ${tracked.symbol} pumped ${pnlPercent.toFixed(1)}% | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
-        } else if (outcome === 'dump') {
-          console.log(`LEARNED: ${tracked.symbol} dumped ${pnlPercent.toFixed(1)}% | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
+          if (currentData.price < tracked.lowestPrice) {
+            tracked.lowestPrice = currentData.price;
+            tracked.maePercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
+          }
+          
+          console.log(`[WINDOW-${windowMinutes}min] ${tracked.symbol}: ${pnlPercent.toFixed(1)}% | MFE: ${(tracked.mfePercent || 0).toFixed(1)}% | MAE: ${(tracked.maePercent || 0).toFixed(1)}%`);
+          
+          const pumpThreshold = config.pumpThreshold || 10;
+          const microPumpThreshold = config.microPumpThreshold || 5;
+          const dumpThreshold = config.dumpThreshold || -10;
+          
+          if (tracked.mfePercent >= this.MFE_PUMP_THRESHOLD) {
+            tracked.outcomeDecided = true;
+            tracked.outcome = 'pump';
+            tracked.outcomeWindow = windowMinutes;
+            console.log(`[PUMP-${windowMinutes}min] ${tracked.symbol} hit +${tracked.mfePercent.toFixed(1)}% MFE!`);
+          } else if (pnlPercent >= pumpThreshold) {
+            tracked.outcomeDecided = true;
+            tracked.outcome = 'pump';
+            tracked.outcomeWindow = windowMinutes;
+            console.log(`[PUMP-${windowMinutes}min] ${tracked.symbol} at +${pnlPercent.toFixed(1)}%!`);
+          } else if (pnlPercent >= microPumpThreshold && pnlPercent < pumpThreshold) {
+            tracked.hasMicroPump = true;
+            console.log(`[MICRO-PUMP-${windowMinutes}min] ${tracked.symbol} at +${pnlPercent.toFixed(1)}%`);
+          } else if (tracked.maePercent <= this.MAE_DUMP_THRESHOLD || pnlPercent <= dumpThreshold) {
+            tracked.outcomeDecided = true;
+            tracked.outcome = 'dump';
+            tracked.outcomeWindow = windowMinutes;
+            console.log(`[DUMP-${windowMinutes}min] ${tracked.symbol} at ${pnlPercent.toFixed(1)}%!`);
+          }
         }
-
-        toRemove.push(mint);
-      } catch (err) {
+      }
+      
+      // Final check at max track time
+      if (now - tracked.entryTime >= this.MAX_TRACK_TIME) {
+        if (!tracked.outcomeDecided) {
+          const currentData = await this.getTokenPrice(mint);
+          if (currentData?.price && tracked.entryPrice) {
+            const pnlPercent = ((currentData.price - tracked.entryPrice) / tracked.entryPrice) * 100;
+            
+            if (tracked.mfePercent >= this.MFE_PUMP_THRESHOLD) {
+              tracked.outcome = 'pump';
+            } else if (tracked.hasMicroPump) {
+              tracked.outcome = 'micro_pump';
+            } else if (pnlPercent >= (config.pumpThreshold || 10)) {
+              tracked.outcome = 'pump';
+            } else if (pnlPercent <= (config.dumpThreshold || -10)) {
+              tracked.outcome = 'dump';
+            } else {
+              tracked.outcome = 'neutral';
+            }
+            tracked.outcomeDecided = true;
+            tracked.finalPnl = pnlPercent;
+          } else {
+            tracked.outcome = 'neutral';
+            tracked.outcomeDecided = true;
+          }
+        }
+        
+        await this.finalizeOutcome(tracked);
         toRemove.push(mint);
       }
     }
 
-    // Clean up
     toRemove.forEach(mint => this.trackedTokens.delete(mint));
     
-    // Auto-optimize every 50 outcomes
     if (this.state.stats.pumps + this.state.stats.dumps > 0 && 
         (this.state.stats.pumps + this.state.stats.dumps) % 50 === 0) {
       const recentOutcomes = await storage.loadRecentOutcomes(100);
       await learner.autoOptimize(recentOutcomes);
     }
     
-    // Flush if we have enough data
     if (this.dataBuffer.length >= 20) {
       await this.flushDataBuffer();
     }
   }
 
+  // Finalize and learn from outcome
+  async finalizeOutcome(tracked) {
+    const outcome = tracked.outcome || 'neutral';
+    const pnlPercent = tracked.finalPnl || 0;
+    
+    if (outcome === 'pump') {
+      this.state.stats.pumps++;
+      this.state.stats.pumpsCaughtByMFE = (this.state.stats.pumpsCaughtByMFE || 0) + 1;
+    } else if (outcome === 'dump') {
+      this.state.stats.dumps++;
+    } else if (outcome === 'micro_pump') {
+      this.state.stats.microPumps = (this.state.stats.microPumps || 0) + 1;
+    } else {
+      this.state.stats.neutral++;
+    }
+    
+    if (tracked.mfePercent) {
+      const totalOutcomes = this.state.stats.pumps + this.state.stats.dumps + this.state.stats.neutral;
+      this.state.stats.avgMFE = ((this.state.stats.avgMFE || 0) * (totalOutcomes - 1) + tracked.mfePercent) / totalOutcomes;
+    }
+    if (tracked.maePercent) {
+      const totalOutcomes = this.state.stats.pumps + this.state.stats.dumps + this.state.stats.neutral;
+      this.state.stats.avgMAE = ((this.state.stats.avgMAE || 0) * (totalOutcomes - 1) + tracked.maePercent) / totalOutcomes;
+    }
+
+    const learningData = {
+      timestamp: Date.now(),
+      token: tracked.tokenData,
+      entryPrice: tracked.entryPrice,
+      exitPrice: tracked.highestPrice || tracked.entryPrice,
+      pnlPercent,
+      mfePercent: tracked.mfePercent || 0,
+      maePercent: tracked.maePercent || 0,
+      outcome,
+      outcomeWindow: tracked.outcomeWindow || 10,
+      holdTimeMinutes: (Date.now() - tracked.entryTime) / 60000,
+      analysis: tracked.analysis,
+      priceSignals: { priceChange30m: tracked.tokenData?.priceChange30m, priceChange1h: tracked.tokenData?.priceChange1h, priceChange24h: tracked.tokenData?.priceChange24h },
+      marketSignals: { marketCap: tracked.tokenData?.marketCap, liquidity: tracked.tokenData?.liquidity },
+      volumeSignals: { volume24h: tracked.tokenData?.volume24h, volumeToMcap: tracked.tokenData?.volumeToMcap },
+      tradingSignals: { buyPressure: tracked.tokenData?.buyPressure, txns24h: tracked.tokenData?.txns24h },
+      holderSignals: { holders: tracked.tokenData?.holders, top10Percent: tracked.holderAnalysis?.top10Percent }
+    };
+
+    this.dataBuffer.push(learningData);
+    
+    const flatSignals = learner.flattenSignals(learningData);
+    await learner.learnFromOutcome(flatSignals, outcome, pnlPercent);
+    await storage.saveOutcome({ signals: flatSignals, outcome, pnlPercent, mfePercent: tracked.mfePercent, maePercent: tracked.maePercent, timestamp: Date.now() });
+    
+    if (outcome === 'pump') {
+      console.log(`LEARNED: ${tracked.symbol} pumped ${pnlPercent.toFixed(1)}% (MFE: ${(tracked.mfePercent || 0).toFixed(1)}%) | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
+    } else if (outcome === 'dump') {
+      console.log(`LEARNED: ${tracked.symbol} dumped ${pnlPercent.toFixed(1)}% (MAE: ${(tracked.maePercent || 0).toFixed(1)}%) | AI accuracy: ${learner.performance.accuracy.toFixed(1)}%`);
+    }
+  }
+        
   // Get token price from multiple sources
   async getTokenPrice(mint) {
     // Try Birdeye first

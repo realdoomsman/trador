@@ -43,7 +43,7 @@ class SelfLearner {
     };
     
     this.learningRate = 0.1; // How fast to adjust weights
-    this.minSamples = 20; // Min samples before adjusting
+    this.minSamples = 10; // Min samples before adjusting (was 20)
   }
 
   async initialize() {
