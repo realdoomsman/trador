@@ -623,6 +623,11 @@ class TradingBrain {
       return { pass: false, reason: `high_sniper_bundle_${tokenData.sniperCount}`, signals: null };
     }
     
+    // BUNDLED RISK AUTO-REJECT: If > 25 snipers, auto-reject regardless of other signals
+    if (tokenData.sniperCount > 25) {
+      return { pass: false, reason: `bundled_risk_${tokenData.sniperCount}_snipers`, signals: null };
+    }
+    
     // SNIPER COUNT FILTER: If > 15 snipers, reject for fast entry
     // These are "bundled" dev launches that look like high-velocity pumps but dump hard
     if (tokenData.sniperCount > 15) {
@@ -760,9 +765,16 @@ class TradingBrain {
   shouldTradeAdvanced(analysis, tokenSignals = null, tokenData = null) {
     if (!analysis) return false;
     
+    // BUNDLED RISK AUTO-REJECT: If > 25 snipers, auto-reject regardless of confidence
+    // These are heavily coordinated launches with extreme dump risk
+    const sniperCount = tokenData?.sniperCount || 0;
+    if (sniperCount > 25) {
+      console.log(`[BUNDLED-RISK] ${tokenData?.symbol} AUTO-REJECTED: ${sniperCount} snipers > 25 (bundled launch)`);
+      return false;
+    }
+    
     // SNIPER COUNT FILTER: If > 15 snipers, require 90% confidence
     // This protects against "bundled" dev launches that look like high-velocity pumps
-    const sniperCount = tokenData?.sniperCount || 0;
     const maxSnipers = 15;
     if (sniperCount > maxSnipers) {
       const requiredConfidence = 90;
@@ -1385,11 +1397,11 @@ class TradingBrain {
     }
   }
 
-  // Classify volatility into buckets - ADAPTIVE BY MARKET CAP
-  // Small caps need tighter thresholds, large caps need looser
+  // Classify volatility into buckets - MFE-PRIMARY CLASSIFICATION
+  // CRITICAL: If maxUp >= threshold at ANY point, it's a pump - even if price crashed back to 0%
+  // This ensures the SelfLearner sees every historical peak as a success signal
   classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
-    const direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     
     // ADAPTIVE THRESHOLDS by market cap
     let weakThreshold, strongThreshold;
@@ -1408,21 +1420,50 @@ class TradingBrain {
     }
     
     let bucket;
+    let direction;
+    
+    // MFE-PRIMARY: Check maxUp FIRST - if it hit the threshold at ANY point, it's a pump
+    // This is the key fix: a token that hit +15% then crashed to -5% is still a "strong_pump"
+    // because we COULD have taken profit at the peak
     if (maxUp >= strongThreshold) {
       bucket = 'strong_pump';
+      direction = 'up';
     } else if (maxUp >= weakThreshold) {
       bucket = 'weak_pump';
+      direction = 'up';
     } else if (maxDown <= -strongThreshold) {
+      // Only classify as dump if it NEVER hit the pump threshold
       bucket = 'strong_dump';
+      direction = 'down';
     } else if (maxDown <= -weakThreshold) {
       bucket = 'weak_dump';
-    } else if (maxUp >= 4 || maxDown <= -4) {
-      bucket = 'micro_move'; // 4%+ moves - still tradeable
+      direction = 'down';
+    } else if (maxUp >= 4) {
+      // Micro-pump: hit 4%+ but not weak threshold
+      bucket = 'micro_move';
+      direction = 'up';
+    } else if (maxDown <= -4) {
+      // Micro-dump: dropped 4%+ but never pumped
+      bucket = 'micro_move';
+      direction = 'down';
     } else {
-      bucket = 'chop'; // maxUp < 4% AND maxDown > -4%
+      // True chop: never moved more than ±4%
+      bucket = 'chop';
+      direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     }
     
-    return { bucket, direction, volatilityScore, maxUp, maxDown, marketCap, weakThreshold, strongThreshold };
+    return { 
+      bucket, 
+      direction, 
+      volatilityScore, 
+      maxUp, 
+      maxDown, 
+      marketCap, 
+      weakThreshold, 
+      strongThreshold,
+      // NEW: Flag if this was a "retracement pump" (hit target then crashed)
+      wasRetracementPump: maxUp >= weakThreshold && maxDown <= -weakThreshold
+    };
   }
 
   // Update stats based on volatility bucket
