@@ -1388,42 +1388,48 @@ class TradingBrain {
 
   // Classify volatility - AI learns optimal thresholds
   // Uses learned parameters, not hardcoded values
+  // Real pump.fun tokens move 50-500%+ - thresholds reflect this
   classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     
-    // Get threshold from config (lowered to 5%)
+    // REAL MEMECOIN THRESHOLDS - tokens move 50-500%+
     const pumpThreshold = this.state.learnedParams?.optimalPumpThreshold || 
-                          config.initialPumpThreshold || 5;
+                          config.initialPumpThreshold || 50;
     const dumpThreshold = this.state.learnedParams?.optimalDumpThreshold || 
-                          config.initialDumpThreshold || -5;
-    const strongPumpThreshold = config.strongPumpThreshold || 15;
-    const strongDumpThreshold = config.strongDumpThreshold || -15;
+                          config.initialDumpThreshold || -30;
+    const strongPumpThreshold = config.strongPumpThreshold || 100;  // 2x
+    const strongDumpThreshold = config.strongDumpThreshold || -50;
+    const massivePumpThreshold = config.massivePumpThreshold || 200; // 3x
+    const moonshotThreshold = config.moonshotThreshold || 500;       // 6x
     
     let bucket;
     let direction;
     
-    // MFE-PRIMARY: If it hit the threshold at ANY point, classify by peak
-    if (maxUp >= strongPumpThreshold * 2) {
-      bucket = 'massive_pump';  // 30%+
+    // MOONSHOT CLASSIFICATION - Real memecoin movements
+    if (maxUp >= moonshotThreshold) {
+      bucket = 'moonshot';      // 500%+ = 6x+ 🚀
+      direction = 'up';
+    } else if (maxUp >= massivePumpThreshold) {
+      bucket = 'massive_pump';  // 200%+ = 3x+
       direction = 'up';
     } else if (maxUp >= strongPumpThreshold) {
-      bucket = 'strong_pump';   // 15%+
+      bucket = 'strong_pump';   // 100%+ = 2x+
       direction = 'up';
     } else if (maxUp >= pumpThreshold) {
-      bucket = 'pump';          // 5%+
+      bucket = 'pump';          // 50%+
       direction = 'up';
     } else if (maxDown <= strongDumpThreshold) {
-      bucket = 'strong_dump';   // -15% or worse
+      bucket = 'strong_dump';   // -50% or worse
       direction = 'down';
     } else if (maxDown <= dumpThreshold) {
-      bucket = 'dump';          // -5% or worse
+      bucket = 'dump';          // -30% or worse
       direction = 'down';
     } else {
-      bucket = 'neutral';       // Between -5% and +5%
+      bucket = 'neutral';       // Between -30% and +50%
       direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     }
     
-    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% => ${bucket} (pump>=${pumpThreshold}%, strong>=${strongPumpThreshold}%)`);
+    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% => ${bucket} (pump>=${pumpThreshold}%, 2x>=${strongPumpThreshold}%, moon>=${moonshotThreshold}%)`);
     
     return { 
       bucket, 
@@ -1440,6 +1446,7 @@ class TradingBrain {
 
   // Update stats - simple counters
   updateVolatilityStats(outcome) {
+    if (!this.state.stats.moonshots) this.state.stats.moonshots = 0;
     if (!this.state.stats.massive_pumps) this.state.stats.massive_pumps = 0;
     if (!this.state.stats.strong_pumps) this.state.stats.strong_pumps = 0;
     if (!this.state.stats.pumps_count) this.state.stats.pumps_count = 0;
@@ -1448,17 +1455,26 @@ class TradingBrain {
     if (!this.state.stats.strong_dumps) this.state.stats.strong_dumps = 0;
     
     switch (outcome.bucket) {
+      case 'moonshot':
+        this.state.stats.moonshots++;
+        this.state.stats.pumps++;
+        if (outcome.maxUp > this.state.stats.bestTrade) {
+          this.state.stats.bestTrade = outcome.maxUp;
+        }
+        console.log(`🌙 MOONSHOT! +${outcome.maxUp.toFixed(1)}% (${outcome.multiplier.toFixed(1)}x) | Best: ${this.state.stats.bestTrade.toFixed(1)}%`);
+        break;
       case 'massive_pump': 
         this.state.stats.massive_pumps++; 
         this.state.stats.pumps++; 
         if (outcome.maxUp > this.state.stats.bestTrade) {
           this.state.stats.bestTrade = outcome.maxUp;
         }
-        console.log(`🚀 MASSIVE PUMP! +${outcome.maxUp.toFixed(1)}% | Best: ${this.state.stats.bestTrade.toFixed(1)}%`);
+        console.log(`🚀 MASSIVE PUMP! +${outcome.maxUp.toFixed(1)}% (${outcome.multiplier.toFixed(1)}x) | Best: ${this.state.stats.bestTrade.toFixed(1)}%`);
         break;
       case 'strong_pump': 
         this.state.stats.strong_pumps++; 
         this.state.stats.pumps++; 
+        console.log(`📈 STRONG PUMP! +${outcome.maxUp.toFixed(1)}% (${outcome.multiplier.toFixed(1)}x)`);
         break;
       case 'pump': 
         this.state.stats.pumps_count++; 

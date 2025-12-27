@@ -50,13 +50,15 @@ export default {
   outcomeWindows: [1, 2, 5, 10, 15, 30, 45, 60],
   
   // ============================================================================
-  // THRESHOLDS - Lower = more sensitive detection
+  // THRESHOLDS - Real pump.fun tokens move 50-500%+
   // ============================================================================
-  // A 5% move in memecoins is significant, 10%+ is a pump
-  initialPumpThreshold: 5,      // 5% = pump (was 20% - way too high!)
-  initialDumpThreshold: -5,     // -5% = dump (was -15%)
-  strongPumpThreshold: 15,      // 15% = strong pump
-  strongDumpThreshold: -15,     // -15% = strong dump
+  // Memecoins move HARD - 5% is noise, 50%+ is a real pump
+  initialPumpThreshold: 50,     // 50% = pump (real movement)
+  initialDumpThreshold: -30,    // -30% = dump
+  strongPumpThreshold: 100,     // 100% = 2x = strong pump
+  strongDumpThreshold: -50,     // -50% = strong dump
+  massivePumpThreshold: 200,    // 200% = 3x = massive pump
+  moonshotThreshold: 500,       // 500% = 6x = MOONSHOT 🚀
   
   // ============================================================================
   // POSITION SIZING - AI learns optimal sizing

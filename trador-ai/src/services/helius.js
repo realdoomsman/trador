@@ -113,30 +113,29 @@ class HeliusService {
     }
   }
 
-  // Get tokens - COMBINE sources for variety
+  // Get tokens - PRIORITIZE FRESH PUMP.FUN TOKENS
+  // Real pump.fun tokens move 50-500%+, Birdeye tokens are old and don't move
   async getPumpFunTokens() {
     const allTokens = [];
     const seenMints = new Set();
     
-    // SOURCE 1: Birdeye for established tokens with good data
-    if (this.birdeyeKey) {
-      try {
-        const birdeyeTokens = await this.getBirdeyeTokens();
-        if (birdeyeTokens?.length > 0) {
-          for (const t of birdeyeTokens) {
-            if (!seenMints.has(t.mint)) {
-              seenMints.add(t.mint);
-              allTokens.push({ ...t, source: 'birdeye' });
-            }
+    // SOURCE 1 (PRIORITY): Pump.fun API for NEWEST tokens - these are the movers!
+    try {
+      const pumpTokens = await this.getPumpFunCoins();
+      if (pumpTokens?.length > 0) {
+        for (const t of pumpTokens) {
+          if (!seenMints.has(t.mint)) {
+            seenMints.add(t.mint);
+            allTokens.push({ ...t, source: 'pumpfun', priority: 1 });
           }
-          console.log(`[BIRDEYE] Added ${birdeyeTokens.length} tokens`);
         }
-      } catch (e) {
-        console.error('[BIRDEYE] Failed:', e.message);
+        console.log(`[PUMP.FUN] Added ${pumpTokens.length} fresh tokens (PRIORITY)`);
       }
+    } catch (e) {
+      console.error('[PUMP.FUN] Failed:', e.message);
     }
     
-    // SOURCE 2: DexScreener for fresh pump.fun tokens
+    // SOURCE 2 (PRIORITY): DexScreener pump.fun tokens - also fresh
     try {
       const dexTokens = await this.getDexScreenerPumpFunTokens();
       if (dexTokens?.length > 0) {
@@ -144,32 +143,53 @@ class HeliusService {
         for (const t of dexTokens) {
           if (!seenMints.has(t.mint)) {
             seenMints.add(t.mint);
-            allTokens.push({ ...t, source: 'dexscreener' });
+            allTokens.push({ ...t, source: 'dexscreener-pumpfun', priority: 2 });
             added++;
           }
         }
-        console.log(`[DEXSCREENER] Added ${added} new tokens`);
+        console.log(`[DEXSCREENER-PUMPFUN] Added ${added} new tokens`);
       }
     } catch (e) {
-      console.error('[DEXSCREENER] Failed:', e.message);
+      console.error('[DEXSCREENER-PUMPFUN] Failed:', e.message);
     }
     
-    // SOURCE 3: Pump.fun API for newest tokens (often blocked but try)
+    // SOURCE 3 (PRIORITY): DexScreener top gainers - tokens already moving!
     try {
-      const pumpTokens = await this.getPumpFunCoins();
-      if (pumpTokens?.length > 0) {
+      const gainers = await this.getDexScreenerTopGainers(20);
+      if (gainers?.length > 0) {
         let added = 0;
-        for (const t of pumpTokens) {
+        for (const t of gainers) {
           if (!seenMints.has(t.mint)) {
             seenMints.add(t.mint);
-            allTokens.push({ ...t, source: 'pumpfun' });
+            allTokens.push({ ...t, source: 'dexscreener-gainer', priority: 3 });
             added++;
           }
         }
-        if (added > 0) console.log(`[PUMP.FUN] Added ${added} new tokens`);
+        console.log(`[DEXSCREENER-GAINERS] Added ${added} top gainers (>20% move)`);
       }
     } catch (e) {
-      // Pump.fun often blocks server requests, ignore
+      console.error('[DEXSCREENER-GAINERS] Failed:', e.message);
+    }
+    
+    // SOURCE 4 (FALLBACK): Birdeye for established tokens - ONLY if we need more
+    // These are older tokens that typically don't move as much
+    if (allTokens.length < 50 && this.birdeyeKey) {
+      try {
+        const birdeyeTokens = await this.getBirdeyeTokens();
+        if (birdeyeTokens?.length > 0) {
+          let added = 0;
+          for (const t of birdeyeTokens) {
+            if (!seenMints.has(t.mint)) {
+              seenMints.add(t.mint);
+              allTokens.push({ ...t, source: 'birdeye', priority: 4 });
+              added++;
+            }
+          }
+          console.log(`[BIRDEYE] Added ${added} tokens (fallback)`);
+        }
+      } catch (e) {
+        console.error('[BIRDEYE] Failed:', e.message);
+      }
     }
     
     if (allTokens.length === 0) {
@@ -178,14 +198,12 @@ class HeliusService {
       return this.generateSyntheticTokens(50);
     }
     
-    // Shuffle to mix sources
-    for (let i = allTokens.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allTokens[i], allTokens[j]] = [allTokens[j], allTokens[i]];
-    }
+    // Sort by priority (fresh pump.fun first, Birdeye last)
+    allTokens.sort((a, b) => (a.priority || 99) - (b.priority || 99));
     
-    this.dataSource = 'mixed';
-    console.log(`[MIXED] Total ${allTokens.length} unique tokens from multiple sources`);
+    this.dataSource = 'pumpfun-priority';
+    const sources = [...new Set(allTokens.map(t => t.source))].join('+');
+    console.log(`[${sources.toUpperCase()}] Total ${allTokens.length} tokens (pump.fun prioritized)`);
     return allTokens;
   }
 
