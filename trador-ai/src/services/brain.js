@@ -1391,38 +1391,39 @@ class TradingBrain {
   classifyVolatility(maxUp, maxDown, marketCap = 100000) {
     const volatilityScore = Math.max(Math.abs(maxUp), Math.abs(maxDown));
     
-    // Get AI-learned threshold (or use initial default)
+    // Get threshold from config (lowered to 5%)
     const pumpThreshold = this.state.learnedParams?.optimalPumpThreshold || 
-                          config.initialPumpThreshold || 20;
+                          config.initialPumpThreshold || 5;
     const dumpThreshold = this.state.learnedParams?.optimalDumpThreshold || 
-                          config.initialDumpThreshold || -15;
+                          config.initialDumpThreshold || -5;
+    const strongPumpThreshold = config.strongPumpThreshold || 15;
+    const strongDumpThreshold = config.strongDumpThreshold || -15;
     
     let bucket;
     let direction;
     
-    // Simple classification - AI learns what thresholds work best
     // MFE-PRIMARY: If it hit the threshold at ANY point, classify by peak
-    if (maxUp >= pumpThreshold * 5) {
-      bucket = 'massive_pump';  // 5x the threshold
+    if (maxUp >= strongPumpThreshold * 2) {
+      bucket = 'massive_pump';  // 30%+
       direction = 'up';
-    } else if (maxUp >= pumpThreshold * 2) {
-      bucket = 'strong_pump';   // 2x the threshold
+    } else if (maxUp >= strongPumpThreshold) {
+      bucket = 'strong_pump';   // 15%+
       direction = 'up';
     } else if (maxUp >= pumpThreshold) {
-      bucket = 'pump';
+      bucket = 'pump';          // 5%+
       direction = 'up';
-    } else if (maxDown <= dumpThreshold * 2) {
-      bucket = 'strong_dump';
+    } else if (maxDown <= strongDumpThreshold) {
+      bucket = 'strong_dump';   // -15% or worse
       direction = 'down';
     } else if (maxDown <= dumpThreshold) {
-      bucket = 'dump';
+      bucket = 'dump';          // -5% or worse
       direction = 'down';
     } else {
-      bucket = 'neutral';
+      bucket = 'neutral';       // Between -5% and +5%
       direction = maxUp > Math.abs(maxDown) ? 'up' : 'down';
     }
     
-    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% => ${bucket} (threshold: ${pumpThreshold}%)`);
+    console.log(`[CLASSIFY] maxUp=${maxUp.toFixed(1)}% maxDown=${maxDown.toFixed(1)}% => ${bucket} (pump>=${pumpThreshold}%, strong>=${strongPumpThreshold}%)`);
     
     return { 
       bucket, 

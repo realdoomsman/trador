@@ -50,11 +50,13 @@ export default {
   outcomeWindows: [1, 2, 5, 10, 15, 30, 45, 60],
   
   // ============================================================================
-  // INITIAL THRESHOLDS - AI will learn and adjust these
+  // THRESHOLDS - Lower = more sensitive detection
   // ============================================================================
-  // Starting points - learner.js adjusts based on outcomes
-  initialPumpThreshold: 20,     // Start at 20%, AI adjusts
-  initialDumpThreshold: -15,    // Start at -15%, AI adjusts
+  // A 5% move in memecoins is significant, 10%+ is a pump
+  initialPumpThreshold: 5,      // 5% = pump (was 20% - way too high!)
+  initialDumpThreshold: -5,     // -5% = dump (was -15%)
+  strongPumpThreshold: 15,      // 15% = strong pump
+  strongDumpThreshold: -15,     // -15% = strong dump
   
   // ============================================================================
   // POSITION SIZING - AI learns optimal sizing
