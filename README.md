@@ -4,34 +4,33 @@
 
 ![TRADOR Logo](https://img.shields.io/badge/TRADOR-AI%20Trading-00ff88?style=for-the-badge&logo=solana)
 
-**The Most Advanced Self-Learning AI Trading System for Solana Memecoins**
+**A self-learning, multi-model AI analysis and paper-trading system for Solana memecoins**
 
-[![Solana](https://img.shields.io/badge/Solana-Blockchain-9945FF?style=flat&logo=solana)](https://solana.com)
-[![AI Powered](https://img.shields.io/badge/AI-Multi--Model-00ccff?style=flat)](https://github.com/realdoomsman/trador)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Solana](https://img.shields.io/badge/Solana-Blockchain-9945FF?style=flat&logo=solana)
+![AI Powered](https://img.shields.io/badge/AI-Multi--Model-00ccff?style=flat)
 
-[Live Dashboard](http://34.123.211.253:3002) • [Documentation](#documentation) • [Whitepaper](#whitepaper)
+[Architecture](#architecture) • [Installation](#installation) • [Whitepaper](#whitepaper)
 
 </div>
 
 ---
 
-## 🚀 Overview
+## Overview
 
-TRADOR is a cutting-edge AI trading system designed specifically for Solana memecoins. It combines multiple AI models, on-chain analysis, wallet intelligence, and social signals to identify high-potential trading opportunities while avoiding rugs and scams.
+TRADOR is an AI trading system designed specifically for Solana memecoins. It combines multiple AI models, on-chain analysis, wallet intelligence, and social signals to identify high-potential trading opportunities while avoiding rugs and scams.
 
 ### Key Features
 
-- **🧠 Multi-AI Consensus** - Combines Gemini, GPT-4, Claude, Groq, and Perplexity for trading decisions
-- **🔍 Deep On-Chain Analysis** - Analyzes holder distribution, whale wallets, and transaction patterns
-- **🛡️ Security Scanning** - Integrates RugCheck and GoPlus for automated rug detection
-- **📊 Self-Learning AI** - Continuously improves from trading outcomes
-- **🌐 Social Intelligence** - Tracks narratives, viral potential, and market sentiment
-- **💼 Wallet Intelligence** - Identifies dev wallets, snipers, whales, and profitable traders
+- **Multi-AI Consensus** - Combines Gemini, GPT-4, Claude, Groq, and Perplexity for trading decisions
+- **Deep On-Chain Analysis** - Analyzes holder distribution, whale wallets, and transaction patterns
+- **Security Scanning** - Integrates RugCheck and GoPlus for automated rug detection
+- **Self-Learning AI** - Continuously improves from trading outcomes
+- **Social Intelligence** - Tracks narratives, viral potential, and market sentiment
+- **Wallet Intelligence** - Identifies dev wallets, snipers, whales, and profitable traders
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Architecture](#architecture)
 - [Components](#components)
@@ -45,7 +44,7 @@ TRADOR is a cutting-edge AI trading system designed specifically for Solana meme
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -88,7 +87,7 @@ TRADOR is a cutting-edge AI trading system designed specifically for Solana meme
 
 ---
 
-## 🔧 Components
+## Components
 
 ### 1. Trading Brain (`brain.js`)
 The central intelligence that coordinates all analysis systems and makes trading decisions.
@@ -159,7 +158,7 @@ Social signal analysis.
 
 ---
 
-## 🤖 AI Systems
+## AI Systems
 
 ### Multi-AI Consensus
 
@@ -204,7 +203,7 @@ Token Tracked → 30min Wait → Check Price → Classify Outcome
 
 ---
 
-## 🛡️ Security Features
+## Security Features
 
 ### Automated Security Checks
 
@@ -233,7 +232,7 @@ Every token is scanned for:
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -274,7 +273,7 @@ pm2 save
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -309,7 +308,7 @@ API_PORT=3003
 
 ---
 
-## 📡 API Reference
+## API Reference
 
 ### Endpoints
 
@@ -343,11 +342,11 @@ API_PORT=3003
 
 ---
 
-## 📄 Whitepaper
+## Whitepaper
 
 ### Abstract
 
-TRADOR represents a paradigm shift in memecoin trading by combining multiple artificial intelligence models with deep on-chain analysis and social intelligence. The system learns from every trade outcome, continuously improving its ability to identify profitable opportunities while avoiding scams and rugs.
+TRADOR combines multiple artificial intelligence models with deep on-chain analysis and social intelligence. The system learns from every trade outcome, continuously improving its ability to identify profitable opportunities while avoiding scams and rugs.
 
 ### Problem Statement
 
@@ -381,16 +380,6 @@ TRADOR addresses these challenges through:
    - Viral detection
    - Sentiment analysis
 
-### Tokenomics (Future)
-
-| Allocation | Percentage |
-|------------|------------|
-| Liquidity | 40% |
-| Development | 20% |
-| Marketing | 15% |
-| Team | 15% |
-| Reserve | 10% |
-
 ### Technical Specifications
 
 - **Blockchain**: Solana
@@ -402,16 +391,16 @@ TRADOR addresses these challenges through:
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
-### Phase 1 ✅ (Complete)
+### Phase 1 (Complete)
 - [x] Core trading brain
 - [x] Birdeye integration
 - [x] Basic analytics
 - [x] Virtual trading
 - [x] Dashboard v1
 
-### Phase 2 ✅ (Complete)
+### Phase 2 (Complete)
 - [x] Self-learning AI
 - [x] Multi-AI consensus
 - [x] Wallet intelligence
@@ -425,14 +414,12 @@ TRADOR addresses these challenges through:
 - [ ] Advanced backtesting
 
 ### Phase 4 (Planned)
-- [ ] TRADOR token launch
-- [ ] Profit sharing
 - [ ] Copy trading
 - [ ] API access tiers
 
 ---
 
-## 📊 Performance Metrics
+## Performance Metrics
 
 | Metric | Target | Current |
 |--------|--------|---------|
@@ -443,28 +430,13 @@ TRADOR addresses these challenges through:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This software is for educational purposes only. Trading cryptocurrencies involves significant risk. Past performance does not guarantee future results. Always do your own research and never invest more than you can afford to lose.
 
----
-
-## 📜 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<div align="center">
-
-**Built with ❤️ for the Solana community**
-
-[Website](http://34.123.211.253:3002) • [GitHub](https://github.com/realdoomsman/trador) • [Twitter](#)
-
-</div>
